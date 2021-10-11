@@ -32,7 +32,7 @@ void Handler_ReadProcessMemory(PIRP pIrp)
     KCProtocols::RESPONSE_READ_PROCESS_MEM* response = (KCProtocols::RESPONSE_READ_PROCESS_MEM*)outputBuffer;
     if (request->method == KCProtocols::MEM_ACCESS_METHOD::MmCopyVirtualMemory)
     {
-        if (KHelper::Common::ReadProcessMemory(process, request->addr, response->data, request->size, &response->size))
+        if (KHelper::Common::ReadProcessMemory(process, (PVOID)request->addr, response->data, request->size, &response->size))
         {
             ObDereferenceObject(process);
             return;
@@ -40,7 +40,7 @@ void Handler_ReadProcessMemory(PIRP pIrp)
     }
     else if (request->method == KCProtocols::MEM_ACCESS_METHOD::MapToKernelByMdl)
     {
-        if (KHelper::Common::ReadProcessMemoryByMdl(process, request->addr, response->data, request->size, &response->size))
+        if (KHelper::Common::ReadProcessMemoryByMdl(process, (PVOID)request->addr, response->data, request->size, &response->size))
         {
             ObDereferenceObject(process);
             return;
@@ -88,7 +88,7 @@ void Handler_WriteProcessMemory(PIRP pIrp)
     SIZE_T bytesWritten = 0;
     if (request->method == KCProtocols::MEM_ACCESS_METHOD::MmCopyVirtualMemory)
     {
-        if (KHelper::Common::WriteProcessMemory(process, request->addr, request->data, request->size, &bytesWritten))
+        if (KHelper::Common::WriteProcessMemory(process, (PVOID)request->addr, request->data, request->size, &bytesWritten))
         {
             ObDereferenceObject(process);
             return;
@@ -96,7 +96,7 @@ void Handler_WriteProcessMemory(PIRP pIrp)
     }
     else if (request->method == KCProtocols::MEM_ACCESS_METHOD::MapToKernelByMdl)
     {
-        if (KHelper::Common::WriteProcessMemoryByMdl(process, request->addr, request->data, request->size, &bytesWritten))
+        if (KHelper::Common::WriteProcessMemoryByMdl(process, (PVOID)request->addr, request->data, request->size, &bytesWritten))
         {
             ObDereferenceObject(process);
             return;
@@ -143,7 +143,7 @@ void Handler_CreateUserThread(PIRP pIrp)
 
     HANDLE thread;
     clientId = {};
-    if (!NT_SUCCESS(KHelper::Common::CreateUserModeThread(processHandle, request->startAddr, request->parameter, request->createSuspended, &thread, &clientId)))
+    if (!NT_SUCCESS(KHelper::Common::CreateUserModeThread(processHandle, (PVOID)request->startAddr, (PVOID)request->parameter, request->createSuspended, &thread, &clientId)))
     {
         ZwClose(processHandle);
         return;
@@ -263,7 +263,7 @@ void Handler_ChangeHandleAccess(PIRP pIrp)
     }
 
     UINT32 access = request->newAccess;
-    if (!NT_SUCCESS(KHelper::Common::SetUserHandleAccess(process, request->handle, &access, request->queryOnly)))
+    if (!NT_SUCCESS(KHelper::Common::SetUserHandleAccess(process, (PVOID)request->handle, &access, request->queryOnly)))
     {
         ObDereferenceObject(process);
         return;
@@ -336,11 +336,64 @@ void Handler_SetDSE(PIRP pIrp)
     return;
 }
 
+void Handler_AllocateMemory(PIRP pIrp)
+{
+    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
+    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
+    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
+    PVOID outputBuffer = inputBuffer;
+    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
+    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+    pIrp->IoStatus.Information = 0;
+    if (inputSize < sizeof(KCProtocols::REQUEST_ALLOC_PROCESS_MEM) || outputSize < sizeof(KCProtocols::RESPONSE_ALLOC_PROCESS_MEM))
+    {
+        return;
+    }
+
+    auto request = (KCProtocols::REQUEST_ALLOC_PROCESS_MEM*)inputBuffer;
+    auto response = (KCProtocols::RESPONSE_ALLOC_PROCESS_MEM*)outputBuffer;
+
+    PEPROCESS process = NULL;
+    auto status = PsLookupProcessByProcessId((HANDLE)request->pid, &process);
+    if (!NT_SUCCESS(status))
+    {
+        return;
+    }
+    KAPC_STATE apc;
+    KeStackAttachProcess(process, &apc);
+    if (!request->isFree)
+    {
+        SIZE_T size = 0;
+        status = ZwAllocateVirtualMemory(ZwCurrentProcess(), (PVOID*)&request->addr, 0, &size, MEM_COMMIT, request->protect);
+        if (!NT_SUCCESS(status))
+        {
+            KeUnstackDetachProcess(&apc);
+            ObDereferenceObject(process);
+            return;
+        }
+        response->base = request->addr;
+    }
+    else
+    {
+        // free the memory
+        SIZE_T size = 0;
+        if (!NT_SUCCESS(ZwFreeVirtualMemory(ZwCurrentProcess(), (PVOID*)&request->addr, &size, MEM_RELEASE)))
+        {
+            KeUnstackDetachProcess(&apc);
+            ObDereferenceObject(process);
+            return;
+        }
+    }
+    
+    KeUnstackDetachProcess(&apc);
+    ObDereferenceObject(process);
+    pIrp->IoStatus.Status = STATUS_SUCCESS;
+    pIrp->IoStatus.Information = outputSize;
+    return;
+}
+
 NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
 {
-    OB_PRE_OPERATION_INFORMATION
-
-
     UNREFERENCED_PARAMETER(device);
 
     PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
@@ -391,6 +444,12 @@ NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
     case CC_SET_DSE:
     {
         Handler_SetDSE(pIrp);
+        break;
+    }
+    case CC_ALLOC_PROCESS_MEM:
+
+    {
+        Handler_AllocateMemory(pIrp);
         break;
     }
     default:

@@ -1,3 +1,8 @@
+// When used in kernel development
+// #include <ntifs.h>
+// When used in application development
+// #include <windows.h>
+
 #define CTL_CODE( DeviceType, Function, Method, Access ) (                 \
     ((DeviceType) << 16) | ((Access) << 14) | ((Function) << 2) | (Method) \
 )
@@ -12,14 +17,13 @@
 #define CC_DELETE_FILE ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x807, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_BSOD ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x808, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_SET_DSE ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x809, METHOD_BUFFERED, FILE_READ_DATA))
-
-
 //todo:
 // https://www.unknowncheats.me/forum/anti-cheat-bypass/285491-pspnotifyenablemask-tricks-explained.html
 #define CC_SET_NOTIFY_MASK ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80A, METHOD_BUFFERED, FILE_READ_DATA))
 // https://github.com/dx9hk/MmUnloadedDrivers
 // PiDDBCacheTable MmUnloadedDrivers
 #define CC_CLEAR_DRIVER_TRACE ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80B, METHOD_BUFFERED, FILE_READ_DATA))
+#define CC_ALLOC_PROCESS_MEM ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80C, METHOD_BUFFERED, FILE_READ_DATA))
 
 
 #define KC_DEVICE_NAME L"\\Device\\KernelCorridor"
@@ -40,13 +44,13 @@ namespace KCProtocols
     {
         MEM_ACCESS_METHOD method;
         UINT32 pid;
-        SIZE_T size;
-        PVOID addr;
+        UINT64 size;
+        UINT64 addr;
     };
 
     struct RESPONSE_READ_PROCESS_MEM
     {
-        SIZE_T size;
+        UINT64 size;
         UINT8 data[0];
     };
 
@@ -55,7 +59,7 @@ namespace KCProtocols
         MEM_ACCESS_METHOD method;
         UINT32 pid;
         UINT32 size;
-        PVOID addr;
+        UINT64 addr;
         UINT8 data[0];
     };
 
@@ -67,9 +71,9 @@ namespace KCProtocols
     struct REQUEST_CREATE_USER_THREAD
     {
         UINT32 pid;
-        PVOID startAddr;
-        PVOID parameter;
-        bool createSuspended;
+        UINT64 startAddr;
+        UINT64 parameter;
+        UINT8 createSuspended;
     };
 
     struct RESPONSE_CREATE_USER_THREAD
@@ -81,7 +85,7 @@ namespace KCProtocols
     struct REQUEST_SET_PROCESS_PROTECTION_FIELD
     {
         UINT32 pid;
-        bool queryOnly;
+        UINT8 queryOnly;
         UINT8 newProtect;
     };
 
@@ -108,9 +112,9 @@ namespace KCProtocols
     struct REQUEST_SET_HANDLE_ACCESS
     {
         UINT32 pid;
-        HANDLE handle;
+        UINT64 handle;
         UINT32 newAccess;
-        bool queryOnly;
+        UINT8 queryOnly;
     };
 
     struct RESPONSE_SET_HANDLE_ACCESS
@@ -128,16 +132,31 @@ namespace KCProtocols
 
     struct REQUEST_SET_DSE
     {
-        DWORD value;
-        bool queryOnly;
+        UINT32 value;
+        UINT8 queryOnly;
     };
 
     struct RESPONSE_SET_DSE
     {
-        DWORD oldValue;
+        UINT32 oldValue;
+    };
+
+    struct REQUEST_ALLOC_PROCESS_MEM
+    {
+        UINT32 pid;
+        UINT8 isFree;
+        UINT64 addr;
+        UINT32 length;
+        UINT32 protect;
+    };
+
+    struct RESPONSE_ALLOC_PROCESS_MEM
+    {
+        UINT64 base;
     };
 }
 
 #pragma pack(pop)
 
-static_assert(sizeof(KCProtocols::RESPONSE_READ_PROCESS_MEM) == 8, "Testing zero size array failed.");
+static_assert(sizeof(KCProtocols::RESPONSE_READ_PROCESS_MEM) == sizeof(UINT64), "Testing zero size array failed.");
+static_assert(sizeof(KCProtocols::MEM_ACCESS_METHOD::MmCopyVirtualMemory) == 4, "This enum should be a DWORD");
