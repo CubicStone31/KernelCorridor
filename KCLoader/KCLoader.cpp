@@ -10,8 +10,9 @@
 #include <utility>
 #include <versionhelpers.h>
 #include <string>
+#include <memory>
 
-void OutputMsgW(const wchar_t* fmt, ...)
+void PrintW(const wchar_t* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -19,11 +20,41 @@ void OutputMsgW(const wchar_t* fmt, ...)
     wchar_t* lpszBuf = (TCHAR*)_alloca(len * sizeof(wchar_t));
     vswprintf_s(lpszBuf, len, fmt, args);
     va_end(args);    
-
     printf("%ws\n", lpszBuf);
-
     return;
 }
+
+/// <summary>
+/// Caution: memory leak in this function
+/// </summary>
+/// <param name="fmt"></param>
+/// <param name=""></param>
+void ThrowException(const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    int len = _vscprintf(fmt, args) + 1;
+    static char* buffer = (char*)malloc(1024 * 1024);
+    vsprintf_s(buffer, len, fmt, args);
+    va_end(args);
+    throw std::exception(buffer);
+}
+
+class ServiceHolder
+{
+public:
+    ServiceHolder(SC_HANDLE handle)
+    {
+        this->handle = handle;
+    }
+
+    ~ServiceHolder()
+    {
+        CloseServiceHandle(handle);
+    }
+private:
+    SC_HANDLE handle;
+};
 
 std::wstring StringToWString(const std::string& str)
 {
@@ -59,49 +90,38 @@ std::wstring FindKernelExecutable()
 
     if (!numOfKernelFilesFound)
     {
-        OutputMsgW(L"Error: no kernel file found.");
+        PrintW(L"Error: no kernel file found.");
         return {};
     }
 
     if (numOfKernelFilesFound > 1)
     {
-        OutputMsgW(L"Error: multiple kernel files found.");
+        PrintW(L"Error: multiple kernel files found.");
         return {};
     }
 
     return kernelFilePath;
 }
 
-void InstallDriver(const wchar_t* lpszDriverName, const wchar_t* lpszDriverPath) 
+/// <summary>
+/// Install driver service
+/// </summary>
+/// <param name="lpszDriverName"></param>
+/// <param name="lpszDriverPath"></param>
+/// <returns>return false if a service with the same name exists. return true if no error occurs</returns>
+bool InstallDriver(const wchar_t* lpszDriverName, const wchar_t* lpszDriverPath) 
 {
-    wchar_t szTempStr[MAX_PATH];
-    HKEY hKey;
-    DWORD dwData;
     wchar_t szDriverImagePath[MAX_PATH];
-
-    if (NULL == lpszDriverName || NULL == lpszDriverPath) 
-    {
-        throw std::exception("Invalid parameter.");
-    }
-    //得到完整的驱动路径
     GetFullPathNameW(lpszDriverPath, MAX_PATH, szDriverImagePath, NULL);
 
-    SC_HANDLE hServiceMgr = NULL;// SCM管理器的句柄
-    SC_HANDLE hService = NULL;// NT驱动程序的服务句柄
-
-    //打开服务控制管理器
-    hServiceMgr = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
-    if (hServiceMgr == NULL) 
+    auto serviceMgr = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    if (serviceMgr == NULL) 
     {
-        char tmp[256];
-        sprintf_s(tmp, "OpenSCManager() failed with %#X.", GetLastError());
-        throw std::exception(tmp);
+        ThrowException("OpenSCManagerW() failed with last error %d.", GetLastError());
     }
+    ServiceHolder holder1(serviceMgr);
 
-    // OpenSCManager成功
-
-    //创建驱动所对应的服务
-    hService = CreateServiceW(hServiceMgr,
+    auto service = CreateServiceW(serviceMgr,
         lpszDriverName, // 驱动程序的在注册表中的名字
         lpszDriverName, // 注册表驱动程序的DisplayName 值
         SERVICE_ALL_ACCESS, // 加载驱动程序的访问权限
@@ -114,206 +134,136 @@ void InstallDriver(const wchar_t* lpszDriverName, const wchar_t* lpszDriverPath)
         0, // 注册表驱动程序的DependOnService 值
         NULL,
         NULL);
-
-    if (hService == NULL)
+    if (service == NULL)
     {
-        if (GetLastError() == ERROR_SERVICE_EXISTS)
+        auto error = GetLastError();
+        if (error != ERROR_SERVICE_EXISTS)
         {
-            //服务创建失败，是由于服务已经创立过
-            // delete it, and re-create, as the path to executable may not be correct
-            auto prev_service = OpenService(hServiceMgr, lpszDriverName, SERVICE_ALL_ACCESS);
-            if (NULL == prev_service)
-            {
-                CloseServiceHandle(hServiceMgr);
-                throw std::exception("Failed to delete previous service: cannot open this service.");
-            }
-            SERVICE_STATUS_PROCESS status = {};
-            DWORD bytesNeeded = 0;
-            if (!QueryServiceStatusEx(prev_service, SC_STATUS_PROCESS_INFO, (BYTE*)&status, sizeof(status), &bytesNeeded))
-            {
-                DWORD error = GetLastError();
-                CloseServiceHandle(hServiceMgr);
-                CloseServiceHandle(prev_service);
-                char tmp[256];
-                sprintf_s(tmp, "Failed to query previous service status, QueryServiceStatusEx() failed with %#X.", error);
-                throw std::exception(tmp);
-            }
-            if (status.dwCurrentState != SERVICE_STOPPED)
-            {
-                CloseServiceHandle(hServiceMgr);
-                CloseServiceHandle(prev_service);
-                throw std::exception("Previous service is not stopped.");
-            }
-            if (!DeleteService(prev_service))
-            {
-                DWORD error = GetLastError();
-                CloseServiceHandle(hServiceMgr);
-                CloseServiceHandle(prev_service);
-                char tmp[256];
-                sprintf_s(tmp, "Failed to delete previous service, DeleteService() failed with %#X.", error);
-                throw std::exception(tmp);
-            }
-            CloseServiceHandle(prev_service);
-
-            // the previous service has been deleted, create our service again
-
-            hService = CreateServiceW(hServiceMgr,
-                lpszDriverName, // 驱动程序的在注册表中的名字
-                lpszDriverName, // 注册表驱动程序的DisplayName 值
-                SERVICE_ALL_ACCESS, // 加载驱动程序的访问权限
-                SERVICE_KERNEL_DRIVER, // 表示加载的服务是文件系统驱动程序
-                SERVICE_DEMAND_START, // 注册表驱动程序的Start 值
-                SERVICE_ERROR_IGNORE, // 注册表驱动程序的ErrorControl 值
-                szDriverImagePath, // 注册表驱动程序的ImagePath 值
-                0,// 注册表驱动程序的Group 值
-                NULL,
-                0, // 注册表驱动程序的DependOnService 值
-                NULL,
-                NULL);
-            if (hService == NULL)
-            {
-                auto err = GetLastError();
-                CloseServiceHandle(hServiceMgr); // SCM句柄
-                char tmp[256];
-                sprintf_s(tmp, "Second call to CreateServiceW() failed with %#X.", err);
-                throw std::exception(tmp);
-            }
-
-            CloseServiceHandle(hService);
-            CloseServiceHandle(hServiceMgr);
-            return;
+            ThrowException("CreateServiceW() failed with last error %d.", GetLastError());
         }
         else
         {
-            auto err = GetLastError();
-            CloseServiceHandle(hServiceMgr); // SCM句柄
-            char tmp[256];
-            sprintf_s(tmp, "CreateServiceW() failed with %#X.", err);
-            throw std::exception(tmp);
+            return false;
         }
     }
-    CloseServiceHandle(hService); // 服务句柄
-    CloseServiceHandle(hServiceMgr); // SCM句柄
-    return;
+    ServiceHolder holder2(service);
+    return true;
 }
 
 void StartDriver(const wchar_t* lpszDriverName)
 {
-    SC_HANDLE schManager;
-    SC_HANDLE schService;
-    SERVICE_STATUS svcStatus;
-
-    if (NULL == lpszDriverName) 
+    auto serviceMgr = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    if (NULL == serviceMgr)
     {
-        throw std::exception("Invalid parameter.");
+        ThrowException("OpenSCManager() failed with %d.", GetLastError());
     }
-
-    schManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
-    if (NULL == schManager)
+    ServiceHolder holder1(serviceMgr);
+    auto service = OpenServiceW(serviceMgr, lpszDriverName, SERVICE_ALL_ACCESS);
+    if (NULL == service) 
     {
-        char tmp[256];
-        sprintf_s(tmp, "OpenSCManager() failed with %#X.", GetLastError());
-        throw std::exception(tmp);
+        ThrowException("OpenService() failed with %d.", GetLastError());
     }
+    ServiceHolder holder2(service);
 
-    schService = OpenService(schManager, lpszDriverName, SERVICE_ALL_ACCESS);
-    if (NULL == schService) 
-    {
-        auto err = GetLastError();
-        CloseServiceHandle(schManager);
-        char tmp[256];
-        sprintf_s(tmp, "OpenService() failed with %#X.", err);
-        throw std::exception(tmp);
-    }
-
-    if (!StartService(schService, 0, NULL)) 
+    if (!StartServiceW(service, 0, NULL)) 
     {
         DWORD err = GetLastError();
-        CloseServiceHandle(schService);
-        CloseServiceHandle(schManager);
-
-        if (err == ERROR_SERVICE_ALREADY_RUNNING) 
+        if (err != ERROR_SERVICE_ALREADY_RUNNING) 
         {
-            return;
-        }
-        char tmp[256];
-        sprintf_s(tmp, "StartService() failed with %#X.", GetLastError());
-        throw std::exception(tmp);
+            ThrowException("StartServiceW() failed with %d.", err);
+        }   
     }
-
-    CloseServiceHandle(schService);
-    CloseServiceHandle(schManager);
     return;
 }
 
-bool StopDriver(const wchar_t* lpszDriverName) 
+void StopDriver(const wchar_t* lpszDriverName) 
 {
-    SC_HANDLE schManager;
-    SC_HANDLE schService;
-    SERVICE_STATUS svcStatus;
-    bool bStopped = false;
+    auto serviceMgr = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    if (NULL == serviceMgr)
+    {
+        ThrowException("OpenSCManagerW() failed with last error %d.", GetLastError());
+    }
+    ServiceHolder holder1(serviceMgr);
+    auto service = OpenServiceW(serviceMgr, lpszDriverName, SERVICE_ALL_ACCESS);
+    if (NULL == service) 
+    {
+        ThrowException("OpenServiceW() failed with last error %d.", GetLastError());
+    }
+    ServiceHolder holder2(service);
 
-    schManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
-    if (NULL == schManager) {
-        return false;
+
+    SERVICE_STATUS_PROCESS status = {};
+    DWORD bytesNeeded = 0;
+    if (!QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO, (BYTE*)&status, sizeof(status), &bytesNeeded))
+    {
+        ThrowException("QueryServiceStatusEx() failed with last error %d.", GetLastError());
+    }
+    if (status.dwCurrentState == SERVICE_STOPPED)
+    {
+        return;
     }
 
-    schService = OpenService(schManager, lpszDriverName, SERVICE_ALL_ACCESS);
-    if (NULL == schService) {
-        CloseServiceHandle(schManager);
-        return false;
+    SERVICE_STATUS svcStatus = {};
+    if (!ControlService(service, SERVICE_CONTROL_STOP, &svcStatus))
+    {
+        ThrowException("ControlService() failed with last error %d.", GetLastError());
     }
-
-    if (!ControlService(schService, SERVICE_CONTROL_STOP, &svcStatus) && (svcStatus.dwCurrentState != SERVICE_STOPPED)) {
-        CloseServiceHandle(schService);
-        CloseServiceHandle(schManager);
-        return false;
+    if (svcStatus.dwCurrentState != SERVICE_STOPPED)
+    {
+        ThrowException("Target service is not stopped.");
     }
-
-    CloseServiceHandle(schService);
-    CloseServiceHandle(schManager);
-
-    return true;
 }
 
-bool DeleteDriverService(const wchar_t* lpszDriverName) 
+void DeleteDriverService(const wchar_t* lpszDriverName) 
 {
-    SC_HANDLE schManager;
-    SC_HANDLE schService;
-    SERVICE_STATUS svcStatus;
+    auto serviceMgr = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    if (NULL == serviceMgr)
+    {
+        ThrowException("OpenSCManagerW() failed with last error %d.", GetLastError());
+    }
+    ServiceHolder holder1(serviceMgr);
 
-    schManager = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
-    if (NULL == schManager) {
-        return false;
+    auto service = OpenServiceW(serviceMgr, lpszDriverName, SERVICE_ALL_ACCESS);
+    if (NULL == service) 
+    {
+        ThrowException("OpenServiceW() failed with last error %d.", GetLastError());
+    }
+    ServiceHolder holder2(service);
+
+    SERVICE_STATUS_PROCESS status = {};
+    DWORD bytesNeeded = 0;
+    if (!QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO, (BYTE*)&status, sizeof(status), &bytesNeeded))
+    {
+        ThrowException("QueryServiceStatusEx() failed with last error %d.", GetLastError());
+    }
+    if (status.dwCurrentState != SERVICE_STOPPED)
+    {
+        ThrowException("Target service is still running.");
     }
 
-    schService = OpenService(schManager, lpszDriverName, SERVICE_ALL_ACCESS);
-    if (NULL == schService) {
-        CloseServiceHandle(schManager);
-        return false;
+    if (!DeleteService(service))
+    {
+        ThrowException("DeleteService() failed with last error %d.", GetLastError());
     }
-
-    ControlService(schService, SERVICE_CONTROL_STOP, &svcStatus);
-    if (!DeleteService(schService)) {
-        CloseServiceHandle(schService);
-        CloseServiceHandle(schManager);
-        return false;
-    }
-
-    CloseServiceHandle(schService);
-    CloseServiceHandle(schManager);
-
-    return true;
+    return;
 }
 
 bool UnloadKernelCorridor()
 {
-    if (!StopDriver(L"KernelCorridor") || !DeleteDriverService(L"KernelCorridor"))
+    try
     {
-        OutputMsgW(L"Failed to stop driver.");
+        StopDriver(L"KernelCorridor");
+        DeleteDriverService(L"KernelCorridor");
+        PrintW(L"Driver stopped.");
+        return true;
+    }
+    catch (std::exception e)
+    {
+        PrintW(L"Failed to stop driver:");
+        PrintW(StringToWString(e.what()).c_str());
         return false;
     }
-    OutputMsgW(L"Driver stopped.");
+    
     return true;
 }
 
@@ -352,21 +302,29 @@ bool LoadAndInitKernelCorridor(bool init_symbols)
 {
     try
     {
-        InstallDriver(L"KernelCorridor", L".\\KernelCorridor.sys");
+        if (!InstallDriver(L"KernelCorridor", L".\\KernelCorridor.sys"))
+        {
+            // A service with the same name exists
+            StopDriver(L"KernelCorridor");
+            DeleteDriverService(L"KernelCorridor");
+            if (!InstallDriver(L"KernelCorridor", L".\\KernelCorridor.sys"))
+            {
+                ThrowException("Second call to InstallDriver() failed.");
+            }
+        }
         StartDriver(L"KernelCorridor");
     }
     catch (std::exception e)
     {
-        OutputMsgW(L"Failed to load driver:");
-        OutputMsgW(StringToWString(e.what()).c_str());
+        PrintW(L"Failed to load driver:");
+        PrintW(StringToWString(e.what()).c_str());
         return false;
     }
-    OutputMsgW(L"Driver loaded.");
+    PrintW(L"Driver loaded.");
     
-
     if (!init_symbols)
     {
-        OutputMsgW(L"[!] skip loading symbol files, the driver is not fully-initialized.");
+        PrintW(L"[!] skip loading symbol files, the driver is not fully-initialized.");
         return true;
     }
 
@@ -374,14 +332,14 @@ bool LoadAndInitKernelCorridor(bool init_symbols)
     HANDLE driver = CreateFileW(KC_SYMBOLIC_NAME, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
     if (INVALID_HANDLE_VALUE == driver)
     {
-        OutputMsgW(L"Cannot open driver.");
+        PrintW(L"Cannot open driver.");
         return false;
     }
 
     auto kernelFilePath = FindKernelExecutable();
     if (!kernelFilePath.size())
     {
-        OutputMsgW(L"Error: cannot identify kernel, abort.");
+        PrintW(L"Error: cannot identify kernel, abort.");
         return false;
     }
 
@@ -389,16 +347,16 @@ bool LoadAndInitKernelCorridor(bool init_symbols)
     auto ciPath = (GetSystemRoot() / "system32" / "ci.dll").wstring();
     try
     {
-        OutputMsgW(L"Start downloading pdb for file %ws", kernelFilePath.c_str());
+        PrintW(L"Start downloading pdb for file %ws", kernelFilePath.c_str());
         PDBReader::COINIT(COINIT_APARTMENTTHREADED);
         PDBReader::DownloadPDBForFile(kernelFilePath.c_str(), L"Symbols");
 
         if (win8OrLater)
         {           
-            OutputMsgW(L"Start downloading pdb for file %ws", ciPath.c_str());
+            PrintW(L"Start downloading pdb for file %ws", ciPath.c_str());
             PDBReader::DownloadPDBForFile(ciPath.c_str(), L"Symbols");
         }
-        OutputMsgW(L"Download pdb succeeded.");
+        PrintW(L"Download pdb succeeded.");
 
         PDBReader kernelPDB(kernelFilePath.c_str(), L"Symbols");
         PDBReader ciPDB(ciPath.c_str(), L"Symbols");
@@ -423,7 +381,7 @@ bool LoadAndInitKernelCorridor(bool init_symbols)
             auto value = std::get<2>(elem);
             if (!std::get<1>(elem))
             {
-                OutputMsgW(L"Warning: Failed to load critical data. Code: %d.", type);
+                PrintW(L"Warning: Failed to load critical data. Code: %d.", type);
                 continue;
             }
 
@@ -438,12 +396,12 @@ bool LoadAndInitKernelCorridor(bool init_symbols)
             }
         }
 
-        OutputMsgW(L"Driver initialized successfully.");
+        PrintW(L"Driver initialized successfully.");
         return true;
     }
     catch (std::exception e)
     {
-        OutputMsgW(StringToWString(e.what()).c_str());
+        PrintW(StringToWString(e.what()).c_str());
         UnloadKernelCorridor();
         return false;
     }
@@ -479,7 +437,7 @@ int main(int argc, char* argv[])
 
     if (!commandline_handled)
     {
-        OutputMsgW(L"usage: \nkcloader.exe load [--no-symbol]\nkcloader unload");
+        PrintW(L"usage: \nkcloader.exe load [--no-symbol]\nkcloader unload");
     }
 
     return 0;
