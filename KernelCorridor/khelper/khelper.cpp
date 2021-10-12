@@ -123,7 +123,7 @@ NTSTATUS KHelper::Common::ReadProcessMemory(PEPROCESS process, PVOID sourceAddr,
 
 NTSTATUS KHelper::Common::WriteProcessMemory(PEPROCESS process, PVOID targetAddr, PVOID sourceAddr, SIZE_T size, SIZE_T* sizeWritten)
 {
-    if (!GeneralUserModeMemoryCheck(process, sourceAddr, size))
+    if (!GeneralUserModeMemoryCheck(process, targetAddr, size))
     {
         return STATUS_UNSUCCESSFUL;
     }

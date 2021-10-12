@@ -349,7 +349,6 @@ void Handler_AllocateMemory(PIRP pIrp)
     {
         return;
     }
-
     auto request = (KCProtocols::REQUEST_ALLOC_PROCESS_MEM*)inputBuffer;
     auto response = (KCProtocols::RESPONSE_ALLOC_PROCESS_MEM*)outputBuffer;
 
@@ -363,15 +362,16 @@ void Handler_AllocateMemory(PIRP pIrp)
     KeStackAttachProcess(process, &apc);
     if (!request->isFree)
     {
-        SIZE_T size = 0;
-        status = ZwAllocateVirtualMemory(ZwCurrentProcess(), (PVOID*)&request->addr, 0, &size, MEM_COMMIT, request->protect);
+        SIZE_T size = request->length;
+        PVOID base = (PVOID)request->addr;
+        status = ZwAllocateVirtualMemory(ZwCurrentProcess(), &base, 0, &size, MEM_COMMIT, request->protect);
         if (!NT_SUCCESS(status))
         {
             KeUnstackDetachProcess(&apc);
             ObDereferenceObject(process);
             return;
         }
-        response->base = request->addr;
+        response->base = (UINT64)base;
     }
     else
     {
@@ -447,7 +447,6 @@ NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
         break;
     }
     case CC_ALLOC_PROCESS_MEM:
-
     {
         Handler_AllocateMemory(pIrp);
         break;
