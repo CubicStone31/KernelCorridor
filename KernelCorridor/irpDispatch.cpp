@@ -392,6 +392,31 @@ void Handler_AllocateMemory(PIRP pIrp)
     return;
 }
 
+void Handler_QueueUserAPC(PIRP pIrp)
+{
+    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
+    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
+    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
+    PVOID outputBuffer = inputBuffer;
+    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
+    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+    pIrp->IoStatus.Information = 0;
+    if (inputSize < sizeof(KCProtocols::REQUEST_QUEUE_USER_APC) || outputSize < sizeof(KCProtocols::RESPONSE_QUEUE_USER_APC))
+    {
+        return;
+    }
+    auto request = (KCProtocols::REQUEST_QUEUE_USER_APC*)inputBuffer;
+    auto response = (KCProtocols::RESPONSE_QUEUE_USER_APC*)outputBuffer;
+
+    // TODO: IMplement this
+
+
+
+    pIrp->IoStatus.Status = STATUS_SUCCESS;
+    pIrp->IoStatus.Information = outputSize;
+    return;
+}
+
 NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
 {
     UNREFERENCED_PARAMETER(device);
@@ -449,6 +474,11 @@ NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
     case CC_ALLOC_PROCESS_MEM:
     {
         Handler_AllocateMemory(pIrp);
+        break;
+    }
+    case CC_QUEUE_USER_APC:
+    {
+        Handler_QueueUserAPC(pIrp);
         break;
     }
     default:

@@ -24,7 +24,7 @@
 // PiDDBCacheTable MmUnloadedDrivers
 #define CC_CLEAR_DRIVER_TRACE ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80B, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_ALLOC_PROCESS_MEM ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80C, METHOD_BUFFERED, FILE_READ_DATA))
-
+#define CC_QUEUE_USER_APC ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80D, METHOD_BUFFERED, FILE_READ_DATA))
 
 #define KC_DEVICE_NAME L"\\Device\\KernelCorridor"
 #define KC_SYMBOLIC_NAME L"\\??\\KernelCorridor"
@@ -153,6 +153,20 @@ namespace KCProtocols
     struct RESPONSE_ALLOC_PROCESS_MEM
     {
         UINT64 base;
+    };
+
+    struct REQUEST_QUEUE_USER_APC
+    {
+        UINT32 tid;
+        UINT64 apcRoutine;
+        UINT64 apcParam;
+        UINT8 forceExecute;
+    };
+
+    struct RESPONSE_QUEUE_USER_APC
+    {
+        // for now, it is not used
+        UINT64 reserved;
     };
 }
 
