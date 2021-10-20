@@ -586,3 +586,78 @@ NTSTATUS KHelper::Common::SetDSE(IN OUT DWORD* value, bool queryOnly)
     *value = oldValue;
     return STATUS_SUCCESS;
 }
+
+VOID QueueUserAPC_KernelRoutine(PKAPC Apc, PKNORMAL_ROUTINE* NormalRoutine, PVOID* NormalContext, PVOID* SystemArgument1, PVOID* SystemArgument2)
+{
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    // Skip execution
+    if (PsIsThreadTerminating(PsGetCurrentThread()))
+        *NormalRoutine = NULL;
+
+    // Fix Wow64 APC
+    if (PsGetCurrentProcessWow64Process() != NULL)
+        PsWrapApcWow64Thread(NormalContext, (PVOID*)NormalRoutine);
+
+    ExFreePoolWithTag(Apc, KHELPERTAG);
+}
+
+VOID QueueUserAPC_SupportAPCKernelRoutine(
+    PKAPC Apc,
+    PKNORMAL_ROUTINE* NormalRoutine,
+    PVOID* NormalContext,
+    PVOID* SystemArgument1,
+    PVOID* SystemArgument2
+)
+{
+    UNREFERENCED_PARAMETER(NormalRoutine);
+    UNREFERENCED_PARAMETER(NormalContext);
+    UNREFERENCED_PARAMETER(SystemArgument1);
+    UNREFERENCED_PARAMETER(SystemArgument2);
+
+    // Alert current thread
+    KeTestAlertThread(UserMode);
+    ExFreePoolWithTag(Apc, KHELPERTAG);
+}
+
+NTSTATUS KHelper::Common::QueueUserAPC(PKTHREAD thread, void* addr, void* param, bool forceExecute)
+{
+    PKAPC supportAPC = NULL;
+    PKAPC apc = (PKAPC)ExAllocatePoolWithTag(NonPagedPool, sizeof(KAPC), KHELPERTAG);
+    if (!apc)
+    {
+        return STATUS_NO_MEMORY;
+    }
+    KeInitializeApc(apc, thread, OriginalApcEnvironment, QueueUserAPC_KernelRoutine, NULL, (PKNORMAL_ROUTINE)addr, UserMode, param);
+    if (forceExecute)
+    {
+        supportAPC = (PKAPC)ExAllocatePoolWithTag(NonPagedPool, sizeof(KAPC), KHELPERTAG);
+        if (!supportAPC)
+        {
+            ExFreePoolWithTag(apc, KHELPERTAG);
+            return STATUS_NO_MEMORY;
+        }
+        KeInitializeApc(supportAPC, thread, OriginalApcEnvironment, QueueUserAPC_SupportAPCKernelRoutine, NULL, NULL, KernelMode, NULL);
+    }
+
+    if (!KeInsertQueueApc(apc, 0, 0, 0))
+    {
+        ExFreePoolWithTag(apc, KHELPERTAG);
+        if (supportAPC)
+        {
+            ExFreePoolWithTag(supportAPC, KHELPERTAG);
+        }
+        return STATUS_UNSUCCESSFUL;
+    }
+    if (forceExecute)
+    {
+        if (!KeInsertQueueApc(supportAPC, 0, 0, 0))
+        {
+            ExFreePoolWithTag(supportAPC, KHELPERTAG);
+            return STATUS_UNSUCCESSFUL;
+        }
+    }
+
+    return STATUS_SUCCESS;
+}

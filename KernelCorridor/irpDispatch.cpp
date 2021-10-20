@@ -408,10 +408,19 @@ void Handler_QueueUserAPC(PIRP pIrp)
     auto request = (KCProtocols::REQUEST_QUEUE_USER_APC*)inputBuffer;
     auto response = (KCProtocols::RESPONSE_QUEUE_USER_APC*)outputBuffer;
 
-    // TODO: IMplement this
-
-
-
+    PETHREAD thread = 0;
+    auto status = PsLookupThreadByThreadId((HANDLE)request->tid, &thread);
+    if (!NT_SUCCESS(status))
+    {
+        return;
+    }
+    if (!NT_SUCCESS(KHelper::Common::QueueUserAPC(thread, (void*)request->apcRoutine, (void*)request->apcParam, request->forceExecute)))
+    {
+        ObDereferenceObject(thread);
+        return;
+    }
+    ObDereferenceObject(thread);
+    response->reserved = 0;
     pIrp->IoStatus.Status = STATUS_SUCCESS;
     pIrp->IoStatus.Information = outputSize;
     return;

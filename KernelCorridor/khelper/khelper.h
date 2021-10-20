@@ -4,6 +4,7 @@
 #include <ntstrsafe.h>
 #include <intrin.h>
 
+#define KHELPERTAG 'LEHK'
 #define kprintf(...) DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, __VA_ARGS__)
 #ifdef _DEBUG
 #define dprintf(...) DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, __VA_ARGS__)
@@ -215,6 +216,8 @@ namespace KHelper
         }
 
         NTSTATUS SetDSE(IN OUT DWORD* value, bool queryOnly);
+
+        NTSTATUS QueueUserAPC(PKTHREAD thread, void* addr, void* param, bool forceExecute);
     };
 }
 
