@@ -218,6 +218,8 @@ namespace KHelper
         NTSTATUS SetDSE(IN OUT DWORD* value, bool queryOnly);
 
         NTSTATUS QueueUserAPC(PKTHREAD thread, void* addr, void* param, bool forceExecute);
+
+        NTSTATUS SetInformationProcess(HANDLE process, PROCESSINFOCLASS processInformationClass, PVOID processInformation, ULONG processInformationLength);
     };
 }
 

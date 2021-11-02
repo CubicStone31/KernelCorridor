@@ -661,3 +661,8 @@ NTSTATUS KHelper::Common::QueueUserAPC(PKTHREAD thread, void* addr, void* param,
 
     return STATUS_SUCCESS;
 }
+
+NTSTATUS KHelper::Common::SetInformationProcess(HANDLE process, PROCESSINFOCLASS processInformationClass, PVOID processInformation, ULONG processInformationLength)
+{
+    return ZwSetInformationProcess(process, processInformationClass, processInformation, processInformationLength);
+}

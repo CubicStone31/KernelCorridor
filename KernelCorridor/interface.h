@@ -7,6 +7,7 @@
     ((DeviceType) << 16) | ((Access) << 14) | ((Function) << 2) | (Method) \
 )
 
+// Utility interfaces
 #define CC_READ_PROCESS_MEM ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x800, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_WRITE_PROCESS_MEM ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x801, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_CREATE_USER_THREAD ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x802, METHOD_BUFFERED, FILE_READ_DATA))
@@ -25,6 +26,11 @@
 #define CC_CLEAR_DRIVER_TRACE ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80B, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_ALLOC_PROCESS_MEM ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80C, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_QUEUE_USER_APC ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80D, METHOD_BUFFERED, FILE_READ_DATA))
+
+// API interfaces
+#define CC_OPEN_PROCESS ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80E, METHOD_BUFFERED, FILE_READ_DATA))
+#define CC_CLOSE_HANDLE ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x80F, METHOD_BUFFERED, FILE_READ_DATA))
+#define CC_SET_INFORMATION_PROCESS ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x810, METHOD_BUFFERED, FILE_READ_DATA))
 
 #define KC_DEVICE_NAME L"\\Device\\KernelCorridor"
 #define KC_SYMBOLIC_NAME L"\\??\\KernelCorridor"
@@ -166,6 +172,40 @@ namespace KCProtocols
     struct RESPONSE_QUEUE_USER_APC
     {
         // for now, it is not used
+        UINT64 reserved;
+    };
+
+    struct REQUEST_OPEN_PROCESS
+    {
+        UINT32 pid;
+        UINT32 access;
+    };
+
+    struct RESPONSE_OPEN_PROCESS
+    {
+        UINT64 kernelModeHandle;
+    };
+
+    struct REQUEST_CLOSE_HANDLE
+    {
+        UINT64 kernelModeHandle;
+    };
+
+    struct RESPONSE_CLOSE_HANDLE
+    {
+        UINT64 reserved;
+    };
+
+    struct REQUEST_SET_INFORMATION_PROCESS
+    {
+        UINT64 kernelModeHandle;
+        UINT32 processInformationClass;
+        UINT32 processInformationLength;
+        UINT8 processInformation[0];
+    };
+
+    struct RESPONSE_SET_INFORMATION_PROCESS
+    {
         UINT64 reserved;
     };
 }

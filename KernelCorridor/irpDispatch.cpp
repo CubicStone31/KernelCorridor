@@ -426,6 +426,89 @@ void Handler_QueueUserAPC(PIRP pIrp)
     return;
 }
 
+void Handler_OpenProcess(PIRP pIrp)
+{
+    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
+    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
+    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
+    PVOID outputBuffer = inputBuffer;
+    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
+    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+    pIrp->IoStatus.Information = 0;
+    if (inputSize < sizeof(KCProtocols::REQUEST_OPEN_PROCESS) || outputSize < sizeof(KCProtocols::RESPONSE_OPEN_PROCESS))
+    {
+        return;
+    }
+    auto request = (KCProtocols::REQUEST_OPEN_PROCESS*)inputBuffer;
+    auto response = (KCProtocols::RESPONSE_OPEN_PROCESS*)outputBuffer;
+
+    CLIENT_ID cid = {};
+    cid.UniqueProcess = (HANDLE)request->pid;
+    OBJECT_ATTRIBUTES ObjectAttributes = {};
+    InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
+    HANDLE kernelHandle = 0;
+    if (!NT_SUCCESS(ZwOpenProcess(&kernelHandle, request->access, &ObjectAttributes, &cid)))
+    {
+        return ;
+    }
+    response->kernelModeHandle = (UINT64)kernelHandle;
+
+    pIrp->IoStatus.Status = STATUS_SUCCESS;
+    pIrp->IoStatus.Information = outputSize;
+    return;
+}
+
+void Handler_CloseHandle(PIRP pIrp)
+{
+    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
+    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
+    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
+    PVOID outputBuffer = inputBuffer;
+    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
+    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+    pIrp->IoStatus.Information = 0;
+    if (inputSize < sizeof(KCProtocols::REQUEST_CLOSE_HANDLE) || outputSize < sizeof(KCProtocols::RESPONSE_CLOSE_HANDLE))
+    {
+        return;
+    }
+    auto request = (KCProtocols::REQUEST_CLOSE_HANDLE*)inputBuffer;
+    auto response = (KCProtocols::RESPONSE_CLOSE_HANDLE*)outputBuffer;
+
+    ZwClose((HANDLE)request->kernelModeHandle);
+    response->reserved = 0;
+
+    pIrp->IoStatus.Status = STATUS_SUCCESS;
+    pIrp->IoStatus.Information = outputSize;
+    return;
+}
+
+void Handler_SetInformationProcess(PIRP pIrp)
+{
+    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
+    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
+    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
+    PVOID outputBuffer = inputBuffer;
+    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
+    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+    pIrp->IoStatus.Information = 0;
+    if (inputSize < sizeof(KCProtocols::REQUEST_SET_INFORMATION_PROCESS) || outputSize < sizeof(KCProtocols::RESPONSE_SET_INFORMATION_PROCESS))
+    {
+        return;
+    }
+    auto request = (KCProtocols::REQUEST_SET_INFORMATION_PROCESS*)inputBuffer;
+    auto response = (KCProtocols::RESPONSE_SET_INFORMATION_PROCESS*)outputBuffer;
+
+    if (!NT_SUCCESS(KHelper::Common::SetInformationProcess((HANDLE)request->kernelModeHandle, (PROCESSINFOCLASS)request->processInformationClass, request->processInformation, request->processInformationLength)))
+    {
+        return;
+    }
+    response->reserved = 0;
+
+    pIrp->IoStatus.Status = STATUS_SUCCESS;
+    pIrp->IoStatus.Information = outputSize;
+    return;
+}
+
 NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
 {
     UNREFERENCED_PARAMETER(device);
@@ -488,6 +571,21 @@ NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
     case CC_QUEUE_USER_APC:
     {
         Handler_QueueUserAPC(pIrp);
+        break;
+    }
+    case CC_OPEN_PROCESS:
+    {
+        Handler_OpenProcess(pIrp);
+        break;
+    }
+    case CC_CLOSE_HANDLE:
+    {
+        Handler_CloseHandle(pIrp);
+        break;
+    }
+    case CC_SET_INFORMATION_PROCESS:
+    {
+        Handler_SetInformationProcess(pIrp);
         break;
     }
     default:

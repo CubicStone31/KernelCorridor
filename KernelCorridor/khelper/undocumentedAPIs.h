@@ -123,5 +123,12 @@ extern "C"
             PVOID SystemArgument2,
             KPRIORITY Increment
         );
+
+    NTSTATUS NTAPI ZwSetInformationProcess(
+        HANDLE hProcess,
+        PROCESSINFOCLASS ProcessInformationClass,
+        IN PVOID ProcessInformation,
+        ULONG ProcessInformationLength
+        );
 }
 
