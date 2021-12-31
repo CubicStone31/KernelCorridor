@@ -551,6 +551,7 @@ NTSTATUS KHelper::Common::DeleteFile2(PUNICODE_STRING filePath)
     return result;
 }
 
+// Set to 0 to disable driver integrity check
 NTSTATUS KHelper::Common::SetDSE(IN OUT DWORD* value, bool queryOnly)
 {
     if (UnDocumentedData::DriverSignatureEnforcement_Offset == UnDocumentedData::INVALID_DATA_VALUE)

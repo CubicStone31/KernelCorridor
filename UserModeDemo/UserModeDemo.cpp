@@ -540,7 +540,7 @@ void SetDSE(int argc, char* argv[])
 {
     if (argc != 2 && argc != 3)
     {
-        std::cout << "usage: demo.exe dse [newvalue]\n";
+        std::cout << "usage: demo.exe dse [newvalue]\nYou may want to set it to zero to disable driver signature check. Don't forget to turn it back on when you have loaded your unsigned driver.";
         return;
     }
 

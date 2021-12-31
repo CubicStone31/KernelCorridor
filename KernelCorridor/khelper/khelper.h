@@ -108,7 +108,7 @@ namespace KHelper
             return false;
         }
 
-        inline NTSTATUS GetProcessName(PCHAR theName, UINT32 len)
+        inline NTSTATUS GetSelfProcessName(PCHAR theName, UINT32 len)
         {
             if (KHelper::UnDocumentedData::EPROCESS_ImageFileName_Offset == KHelper::UnDocumentedData::INVALID_DATA_VALUE)
             {
@@ -121,6 +121,28 @@ namespace KHelper
             nameptr = (PCHAR)curproc + KHelper::UnDocumentedData::EPROCESS_ImageFileName_Offset;
             strncpy(theName, nameptr, len - 1);
             theName[len - 1] = 0; /**//* NULL at end */
+            return STATUS_SUCCESS;
+        }
+
+        inline NTSTATUS GetProcessName(UINT32 pid, PUNICODE_STRING out)
+        {
+            if (KHelper::UnDocumentedData::EPROCESS_ImageFileName_Offset == KHelper::UnDocumentedData::INVALID_DATA_VALUE)
+            {
+                return STATUS_NOT_IMPLEMENTED;
+            }
+            PEPROCESS process = {};
+            if (PsLookupProcessByProcessId((HANDLE)pid, &process) != STATUS_SUCCESS)
+            {
+                return STATUS_UNSUCCESSFUL;
+            }
+            PUNICODE_STRING processName = {};
+            if (SeLocateProcessImageName(process, &processName) != STATUS_SUCCESS)
+            {
+                ObDereferenceObject(process);
+                return STATUS_UNSUCCESSFUL;
+            }
+            ObDereferenceObject(process);
+            RtlCopyUnicodeString(out, processName);
             return STATUS_SUCCESS;
         }
 
