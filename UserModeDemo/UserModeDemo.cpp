@@ -130,7 +130,7 @@ void ReadMemory(int argc, char* argv[])
     {
         KCProtocols::MEM_ACCESS_METHOD method = (KCProtocols::MEM_ACCESS_METHOD)std::stoull(argv[2]);
         DWORD pid = (DWORD)std::stoull(argv[3]);
-        PVOID addr = (PVOID)std::stoull(argv[4], 0, 16);
+        UINT64 addr = (UINT64)std::stoull(argv[4], 0, 16);
         DWORD size = (DWORD)std::stoull(argv[5]);
 
         KCProtocols::REQUEST_READ_PROCESS_MEM request = {};
@@ -178,7 +178,7 @@ void WriteMemory(int argc, char* argv[])
         std::cout << "Number of bytes to write: " << data.size() << std::endl;
 
         KCProtocols::REQUEST_WRITE_PROCESS_MEM* request = (KCProtocols::REQUEST_WRITE_PROCESS_MEM*)malloc(sizeof(KCProtocols::REQUEST_WRITE_PROCESS_MEM) + data.size());
-        request->addr = addr;
+        request->addr = (UINT64)addr;
         request->method = method;
         request->pid = pid;
         request->size = data.size();
@@ -213,8 +213,8 @@ void CreateThread(int argc, char* argv[])
     try
     {
         DWORD pid = (DWORD)std::stoull(argv[2]);
-        PVOID startAddr = (PVOID)std::stoull(argv[3], 0, 16);
-        PVOID param = (PVOID)std::stoull(argv[4], 0, 16);
+        UINT64 startAddr = (UINT64)std::stoull(argv[3], 0, 16);
+        UINT64 param = (UINT64)std::stoull(argv[4], 0, 16);
 
         KCProtocols::REQUEST_CREATE_USER_THREAD request = {};
         request.createSuspended = false;
@@ -325,7 +325,7 @@ void ChangeHandleAccess(int argc, char* argv[])
 
         KCProtocols::REQUEST_SET_HANDLE_ACCESS request = {};
         KCProtocols::RESPONSE_SET_HANDLE_ACCESS response = {};
-        request.handle = handle;
+        request.handle = (UINT64)handle;
         request.newAccess = access;
         request.pid = pid;
         request.queryOnly = queryOnly;
@@ -498,7 +498,7 @@ void DumpProcess(int argc, char* argv[])
             DWORD bytesToRead = min(trunkSize, bytesRemaining);
             bytesRemaining = bytesRemaining - bytesToRead;
             request.size = bytesToRead;
-            request.addr = curPtr;
+            request.addr = (UINT64)curPtr;
             curPtr += bytesToRead;
 
             DWORD bytesReturned = 0;
