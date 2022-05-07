@@ -1,6 +1,8 @@
 #pragma once
 #include <ntifs.h>
 
+typedef UINT8 BYTE;
+
 #define IMAGE_DIRECTORY_ENTRY_EXPORT          0   // Export Directory
 #define IMAGE_DIRECTORY_ENTRY_IMPORT          1   // Import Directory
 #define IMAGE_DIRECTORY_ENTRY_RESOURCE        2   // Resource Directory
@@ -283,6 +285,37 @@ extern "C" {
         };
         ULONG TypeInfo; // Size=4 Offset=12
     } HANDLE_TABLE_ENTRY, * PHANDLE_TABLE_ENTRY;
+
+    typedef struct _RTL_USER_PROCESS_PARAMETERS
+    {
+        BYTE           Reserved1[16];
+        PVOID          Reserved2[10];
+        UNICODE_STRING ImagePathName;
+        UNICODE_STRING CommandLine;
+    } RTL_USER_PROCESS_PARAMETERS, * PRTL_USER_PROCESS_PARAMETERS;
+
+    typedef struct _PEB
+    {
+        BYTE                          Reserved1[2];
+        BYTE                          BeingDebugged;
+        BYTE                          Reserved2[1];
+        PVOID                         Reserved3[2];
+        PPEB_LDR_DATA                 Ldr;
+        PRTL_USER_PROCESS_PARAMETERS  ProcessParameters;
+        PVOID                         Reserved4[3];
+        PVOID                         AtlThunkSListPtr;
+        PVOID                         Reserved5;
+        ULONG                         Reserved6;
+        PVOID                         Reserved7;
+        ULONG                         Reserved8;
+        ULONG                         AtlThunkSListPtr32;
+        PVOID                         Reserved9[45];
+        BYTE                          Reserved10[96];
+        PVOID PostProcessInitRoutine; // PPS_POST_PROCESS_INIT_ROUTINE
+        BYTE                          Reserved11[128];
+        PVOID                         Reserved12[1];
+        ULONG                         SessionId;
+    } PEB, * PPEB;
 
 #ifdef __cplusplus
 }

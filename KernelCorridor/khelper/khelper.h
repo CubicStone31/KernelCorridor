@@ -174,7 +174,7 @@ namespace KHelper
             return false;
         }
 
-        PVOID GetModuleBaseAddress64A(char* module_name);
+        PVOID GetKernelModuleBaseAddress64A(char* module_name);
 
         PVOID KernelGetProcAddress(PVOID ModuleBase, PCHAR pFunctionName);
     
@@ -242,6 +242,8 @@ namespace KHelper
         NTSTATUS QueueUserAPC(PKTHREAD thread, void* addr, void* param, bool forceExecute);
 
         NTSTATUS SetInformationProcess(HANDLE process, PROCESSINFOCLASS processInformationClass, PVOID processInformation, ULONG processInformationLength);
+
+        NTSTATUS GetProcessModuleBase(DWORD pid, wchar_t* module_name, PVOID* module_base);
     };
 }
 

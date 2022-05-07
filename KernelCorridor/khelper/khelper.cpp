@@ -37,7 +37,7 @@ bool GeneralUserModeMemoryCheck(PEPROCESS process, PVOID addr, SIZE_T size)
     return true;
 }
 
-PVOID KHelper::Common::GetModuleBaseAddress64A(char* module_name)
+PVOID KHelper::Common::GetKernelModuleBaseAddress64A(char* module_name)
 {
     ULONG needlen = 0;
     ZwQuerySystemInformation(SystemModuleInformation, NULL, 0, &needlen);
@@ -566,7 +566,7 @@ NTSTATUS KHelper::Common::SetDSE(IN OUT DWORD* value, bool queryOnly)
     char* base = 0;
     if (info.dwMajorVersion > 6 || (info.dwMajorVersion == 6 && info.dwMinorVersion > 1))   // win 8 or later
     {
-        base = (char*)KHelper::Common::GetModuleBaseAddress64A("CI.DLL");
+        base = (char*)KHelper::Common::GetKernelModuleBaseAddress64A("CI.DLL");
 
     }
     else
@@ -666,4 +666,39 @@ NTSTATUS KHelper::Common::QueueUserAPC(PKTHREAD thread, void* addr, void* param,
 NTSTATUS KHelper::Common::SetInformationProcess(HANDLE process, PROCESSINFOCLASS processInformationClass, PVOID processInformation, ULONG processInformationLength)
 {
     return ZwSetInformationProcess(process, processInformationClass, processInformation, processInformationLength);
+}
+
+NTSTATUS KHelper::Common::GetProcessModuleBase(DWORD pid, wchar_t* module_name, PVOID* module_base)
+{
+    PEPROCESS process = {};
+    if (STATUS_SUCCESS != PsLookupProcessByProcessId((HANDLE)pid, &process))
+    {
+        return STATUS_UNSUCCESSFUL;
+    }
+    KAPC_STATE state = {};
+    KeStackAttachProcess(process, &state);
+    PPEB peb = PsGetProcessPeb(process);
+    if (!peb)
+    {
+        KeUnstackDetachProcess(&state);
+        ObDereferenceObject(process);
+        return STATUS_UNSUCCESSFUL;
+    }
+    UNICODE_STRING name;
+    RtlInitUnicodeString(&name, module_name);
+    PPEB_LDR_DATA pLdr = (PPEB_LDR_DATA)peb->Ldr;
+    bool found = false;
+    for (PLIST_ENTRY list = (PLIST_ENTRY)pLdr->LoadOrder.Flink; list != &pLdr->LoadOrder; list = (PLIST_ENTRY)list->Flink)
+    {
+        PLDR_DATA_TABLE_ENTRY pEntry = CONTAINING_RECORD(list, LDR_DATA_TABLE_ENTRY, InLoadOrderLinks);
+        if (RtlCompareUnicodeString(&pEntry->BaseDllName, &name, TRUE) == 0)
+        {
+            *module_base = pEntry->DllBase;
+            found = true;
+            break;
+        }
+    }
+    KeUnstackDetachProcess(&state);
+    ObDereferenceObject(process);
+    return found ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
 }

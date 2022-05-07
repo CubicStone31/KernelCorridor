@@ -509,6 +509,33 @@ void Handler_SetInformationProcess(PIRP pIrp)
     return;
 }
 
+void Handler_GetProcessModuleBase(PIRP pIrp)
+{
+    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
+    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
+    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
+    PVOID outputBuffer = inputBuffer;
+    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
+    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+    pIrp->IoStatus.Information = 0;
+    if (inputSize < sizeof(KCProtocols::REQUEST_GET_PROCESS_MODULE_BASE) || outputSize < sizeof(KCProtocols::RESPONSE_GET_PROCESS_MODULE_BASE))
+    {
+        return;
+    }
+    auto request = (KCProtocols::REQUEST_GET_PROCESS_MODULE_BASE*)inputBuffer;
+    auto response = (KCProtocols::RESPONSE_GET_PROCESS_MODULE_BASE*)outputBuffer;
+    PVOID base = {};
+    if (STATUS_SUCCESS != KHelper::Common::GetProcessModuleBase(request->pid, request->module_name, &base))
+    {
+        return;
+    }
+    response->base = (UINT64)base;
+    pIrp->IoStatus.Status = STATUS_SUCCESS;
+    pIrp->IoStatus.Information = outputSize;
+    return;
+}
+
+
 NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
 {
     UNREFERENCED_PARAMETER(device);
@@ -586,6 +613,11 @@ NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
     case CC_SET_INFORMATION_PROCESS:
     {
         Handler_SetInformationProcess(pIrp);
+        break;
+    }
+    case CC_GET_PROCESS_MODULE_BASE:
+    {
+        Handler_GetProcessModuleBase(pIrp);
         break;
     }
     default:

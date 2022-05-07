@@ -130,5 +130,10 @@ extern "C"
         IN PVOID ProcessInformation,
         ULONG ProcessInformationLength
         );
+
+    NTKERNELAPI
+        PPEB
+        NTAPI
+        PsGetProcessPeb(IN PEPROCESS Process);
 }
 
