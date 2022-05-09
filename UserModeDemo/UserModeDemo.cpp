@@ -590,9 +590,32 @@ void Wait(int argc, char* argv[])
     Sleep(INFINITE);
 }
 
+void GetProcessModuleBase(int argc, char* argv[])
+{
+    if (argc != 4)
+    {
+        printf("usage: demo.exe gpm [pid] [module_name]\n");
+        return;
+    }
+    DWORD pid = std::stoi(argv[2]);
+    auto module_name = StringToWString(argv[3]);
+    KCProtocols::REQUEST_GET_PROCESS_MODULE_BASE request = {};
+    KCProtocols::RESPONSE_GET_PROCESS_MODULE_BASE response = {};
+    request.pid = pid;
+    wcscpy_s(request.module_name, module_name.c_str());
+    DWORD bytesReturned = 0;
+    if (!DeviceIoControl(G_Driver, CC_GET_PROCESS_MODULE_BASE, &request, sizeof(request), &response, sizeof(response), &bytesReturned, 0))
+    {
+        std::cout << "DeviceIOControl failed.\n";
+        return;
+    }
+    printf("module base at 0x%p\n", response.base);
+    return;
+}
+
 void usage()
 {
-    std::cout << "usage: demo.exe [r]ead/[w]rite/create[T]hread/change[P]rotect/change[H]andleAccess/[te]stReadingProcess/[d]eleteFile/[du]mpProcess/[bs]od/set[DSE]/[wa]it\n";
+    std::cout << "usage: demo.exe [r]ead/[w]rite/create[T]hread/change[P]rotect/change[H]andleAccess/[te]stReadingProcess/[d]eleteFile/[du]mpProcess/[bs]od/set[DSE]/[wa]it/[g]et[P]rocess[M]oduleBase\n";
 }
 
 int main(int argc, char* argv[])
@@ -653,6 +676,10 @@ int main(int argc, char* argv[])
     else if (!_stricmp(argv[1], "wa") || !_stricmp(argv[1], "wait"))
     {
         Wait(argc, argv);
+    }
+    else if (!_stricmp(argv[1], "gpm") || !_stricmp(argv[1], "getprocessmodulebase"))
+    {
+        GetProcessModuleBase(argc, argv);
     }
     else
     {
