@@ -20,12 +20,6 @@ DefaultDestDir = 12
 [SourceDisksFiles]
 
 
-[Manufacturer]
-%ManufacturerName%=Standard,NT$ARCH$
-
-[Standard.NT$ARCH$]
-
-
 [Strings]
 ManufacturerName="<Your manufacturer name>" ;TODO: Replace with your manufacturer name
 ClassName=""
