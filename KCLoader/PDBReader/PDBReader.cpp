@@ -3,6 +3,12 @@
 #include "PDBReader.h"
 #include <filesystem>
 
+#ifdef _WIN64
+#pragma comment(lib, "./PDBReader/diaguids_x64.lib")
+#else
+#pragma comment(lib, "./PDBReader/diaguids.lib")
+#endif 
+
 PDBReader::PDBReader(std::wstring pdb_name) {
     CComPtr<IDiaDataSource> pSource;
     HRESULT hr;

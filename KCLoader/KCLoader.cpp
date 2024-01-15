@@ -413,6 +413,22 @@ int main(int argc, char* argv[])
 {
     bool commandline_handled = false;
 
+    if (argc == 1)
+    {
+        commandline_handled = true;
+        auto ret = MessageBoxW(0, L"Load the driver or unload it?", L"KernelCorridor", MB_YESNO);
+        if (ret == IDYES)
+        {
+            LoadAndInitKernelCorridor(false);
+        }
+        else
+        {
+            UnloadKernelCorridor();
+        }
+    }
+
+
+
     if (argc >= 2 && !_stricmp(argv[1], "load"))
     {
         if (argc == 3)

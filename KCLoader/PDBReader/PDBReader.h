@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 #include <atlbase.h>
-#include <dia2.h>
+#include "./dia2.h"
 #include <optional>
 
 class PDBReader {
