@@ -6,9 +6,9 @@
 
 namespace KernelCorridor
 {
-	bool LoadDriver(const char* driver_file_path, const char* kernel_service_name);
+	bool CreateDriverServiceAndLoadDriver(const std::wstring& driver_file_path, const std::wstring& service_name, bool append_random_suffix, std::wstring& actual_service_name);
 
-	bool DeleteDriver(const char* kernel_service_name);
+	bool StopDriverServiceAndDeleteIt(const std::wstring& kernel_service_name);
 
 	bool Open();
 
