@@ -177,6 +177,8 @@ namespace KHelper
         PVOID GetKernelModuleBaseAddress64A(char* module_name);
 
         PVOID KernelGetProcAddress(PVOID ModuleBase, PCHAR pFunctionName);
+
+        PVOID KernelGetSystemRoutine(PWCHAR systemRoutineName);
     
         inline NTSTATUS CreateVirtualDevice(PDRIVER_OBJECT driverObject, const wchar_t* deviceName, const wchar_t* symbolicLinkName)
         {

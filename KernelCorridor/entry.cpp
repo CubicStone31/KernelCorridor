@@ -1,6 +1,6 @@
 #include <ntifs.h>
 #include "khelper/khelper.h"
-#include "interface.h"
+#include "../KC_usermode/interface.h"
 
 extern NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp);
 
@@ -15,6 +15,7 @@ extern "C"
 
     NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
     {
+        kprintf("driver entry!\n");
         UNREFERENCED_PARAMETER(RegistryPath);
 
         KHelper::Common::FindProcessNameOffset();

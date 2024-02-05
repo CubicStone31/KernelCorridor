@@ -1,6 +1,31 @@
 #include <ntifs.h>
 #include "khelper/khelper.h"
-#include "interface.h"
+#include "../KC_usermode/interface.h"
+
+bool GeneralProtocolHeaderCheckAndIRPStatusPreset(PIRP pIrp, PVOID &input_buffer, PVOID &output_buffer)
+{
+    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
+    PVOID input = pIrp->AssociatedIrp.SystemBuffer;
+    ULONG input_size = stack->Parameters.DeviceIoControl.InputBufferLength;
+    PVOID output = input;
+    ULONG output_size = stack->Parameters.DeviceIoControl.OutputBufferLength;
+    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+    pIrp->IoStatus.Information = 0;
+    if (input_size != sizeof(KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT) ||
+        output_size != sizeof(KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT))
+    {
+        return false;
+    }
+    input_buffer = input;
+    output_buffer = output;
+    return true;
+}
+
+void GeneralIRPSuccessStatusSet(PIRP pIrp)
+{
+    pIrp->IoStatus.Status = STATUS_SUCCESS;
+    pIrp->IoStatus.Information = sizeof(KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT);
+}
 
 void Handler_ReadProcessMemory(PIRP pIrp)
 {
@@ -113,22 +138,14 @@ void Handler_WriteProcessMemory(PIRP pIrp)
 
 void Handler_CreateUserThread(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    PVOID outputBuffer = inputBuffer;
-    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-
-    if (inputSize < sizeof(KCProtocols::REQUEST_CREATE_USER_THREAD) || outputSize < sizeof(KCProtocols::RESPONSE_CREATE_USER_THREAD))
-    {
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
+    { 
         return;
     }
-
     KCProtocols::REQUEST_CREATE_USER_THREAD* request = (KCProtocols::REQUEST_CREATE_USER_THREAD*)inputBuffer;
     KCProtocols::RESPONSE_CREATE_USER_THREAD* response = (KCProtocols::RESPONSE_CREATE_USER_THREAD*)outputBuffer;
-
     CLIENT_ID clientId = {};
     clientId.UniqueProcess = (HANDLE)request->pid;
     clientId.UniqueThread = 0;
@@ -140,7 +157,6 @@ void Handler_CreateUserThread(PIRP pIrp)
     {
         return;
     }
-
     HANDLE thread;
     clientId = {};
     if (!NT_SUCCESS(KHelper::Common::CreateUserModeThread(processHandle, (PVOID)request->startAddr, (PVOID)request->parameter, request->createSuspended, &thread, &clientId)))
@@ -148,29 +164,22 @@ void Handler_CreateUserThread(PIRP pIrp)
         ZwClose(processHandle);
         return;
     }
-
     ZwClose(processHandle);
     ZwClose(thread);
     response->processID = (UINT32)clientId.UniqueProcess;
     response->threadID = (UINT32)clientId.UniqueThread;
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = outputSize;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
 void Handler_InitUndocumentedData(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-
-    if (inputSize < sizeof(KCProtocols::REQUEST_INIT_UNDOCUMENTED_DATA))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
-
     KCProtocols::REQUEST_INIT_UNDOCUMENTED_DATA* request = (KCProtocols::REQUEST_INIT_UNDOCUMENTED_DATA*)inputBuffer;
     switch (request->type)
     {
@@ -195,36 +204,25 @@ void Handler_InitUndocumentedData(PIRP pIrp)
         break;
     }
     }
-    
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = 0;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
 void Handler_SetProcessProtectionField(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    PVOID outputBuffer = inputBuffer;
-    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-
-    if (inputSize < sizeof(KCProtocols::REQUEST_SET_PROCESS_PROTECTION_FIELD) || outputSize < sizeof(KCProtocols::RESPONSE_SET_PROCESS_PROTECTION_FIELD))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
-
     auto request = (KCProtocols::REQUEST_SET_PROCESS_PROTECTION_FIELD*)inputBuffer;
-    auto response = (KCProtocols::RESPONSE_SET_PROCESS_PROTECTION_FIELD*)outputBuffer;
-    
+    auto response = (KCProtocols::RESPONSE_SET_PROCESS_PROTECTION_FIELD*)outputBuffer;  
     PEPROCESS process = NULL;
     if (!NT_SUCCESS(PsLookupProcessByProcessId((HANDLE)request->pid, &process)))
     {
         return;
-    }
-    
+    }   
     UINT8 protect = request->newProtect;
     if (!NT_SUCCESS(KHelper::Common::SetProcessProtectionField(process, &protect, request->queryOnly)))
     {
@@ -232,72 +230,54 @@ void Handler_SetProcessProtectionField(PIRP pIrp)
         return;
     }
     ObDereferenceObject(process);
-
     response->oldProtect = protect;
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = outputSize;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
 void Handler_ChangeHandleAccess(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    PVOID outputBuffer = inputBuffer;
-    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-
-    if (inputSize < sizeof(KCProtocols::REQUEST_SET_HANDLE_ACCESS) || outputSize < sizeof(KCProtocols::RESPONSE_SET_HANDLE_ACCESS))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
     KCProtocols::REQUEST_SET_HANDLE_ACCESS* request = (KCProtocols::REQUEST_SET_HANDLE_ACCESS*)inputBuffer;
     KCProtocols::RESPONSE_SET_HANDLE_ACCESS* response = (KCProtocols::RESPONSE_SET_HANDLE_ACCESS*)outputBuffer;
-
     PEPROCESS process;
     if (!NT_SUCCESS(PsLookupProcessByProcessId((HANDLE)request->pid, &process)))
     {
         return;
     }
-
     UINT32 access = request->newAccess;
     if (!NT_SUCCESS(KHelper::Common::SetUserHandleAccess(process, (PVOID)request->handle, &access, request->queryOnly)))
     {
         ObDereferenceObject(process);
         return;
     }
-
     ObDereferenceObject(process);
     response->oldAccess = access;
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = outputSize;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
 void Handler_DeleteFile(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-
-    if (inputSize < sizeof(KCProtocols::REQUEST_DELETE_FILE))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
     auto request = (KCProtocols::REQUEST_DELETE_FILE*)inputBuffer;
-
     UNICODE_STRING str = {};
     RtlInitUnicodeString(&str, request->path);
     if (!NT_SUCCESS(KHelper::Common::DeleteFile1(&str)))
     {
         return;
     }
-  
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
@@ -309,21 +289,14 @@ void Handler_BSOD(PIRP pIrp)
 
 void Handler_SetDSE(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    PVOID outputBuffer = inputBuffer;
-    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-
-    if (inputSize < sizeof(KCProtocols::REQUEST_SET_DSE) || outputSize < sizeof(KCProtocols::RESPONSE_SET_DSE))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
     KCProtocols::REQUEST_SET_DSE* request = (KCProtocols::REQUEST_SET_DSE*)inputBuffer;
     KCProtocols::RESPONSE_SET_DSE* response = (KCProtocols::RESPONSE_SET_DSE*)outputBuffer;
-
     DWORD dseValue = request->value;
     if (!NT_SUCCESS(KHelper::Common::SetDSE(&dseValue, request->queryOnly)))
     {
@@ -331,27 +304,20 @@ void Handler_SetDSE(PIRP pIrp)
     }
 
     response->oldValue = dseValue;
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = outputSize;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
 void Handler_AllocateMemory(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    PVOID outputBuffer = inputBuffer;
-    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-    if (inputSize < sizeof(KCProtocols::REQUEST_ALLOC_PROCESS_MEM) || outputSize < sizeof(KCProtocols::RESPONSE_ALLOC_PROCESS_MEM))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
     auto request = (KCProtocols::REQUEST_ALLOC_PROCESS_MEM*)inputBuffer;
     auto response = (KCProtocols::RESPONSE_ALLOC_PROCESS_MEM*)outputBuffer;
-
     PEPROCESS process = NULL;
     auto status = PsLookupProcessByProcessId((HANDLE)request->pid, &process);
     if (!NT_SUCCESS(status))
@@ -372,6 +338,7 @@ void Handler_AllocateMemory(PIRP pIrp)
             return;
         }
         response->base = (UINT64)base;
+        response->size = (UINT32)size;
     }
     else
     {
@@ -387,27 +354,20 @@ void Handler_AllocateMemory(PIRP pIrp)
     
     KeUnstackDetachProcess(&apc);
     ObDereferenceObject(process);
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = outputSize;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
 void Handler_QueueUserAPC(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    PVOID outputBuffer = inputBuffer;
-    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-    if (inputSize < sizeof(KCProtocols::REQUEST_QUEUE_USER_APC) || outputSize < sizeof(KCProtocols::RESPONSE_QUEUE_USER_APC))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
     auto request = (KCProtocols::REQUEST_QUEUE_USER_APC*)inputBuffer;
     auto response = (KCProtocols::RESPONSE_QUEUE_USER_APC*)outputBuffer;
-
     PETHREAD thread = 0;
     auto status = PsLookupThreadByThreadId((HANDLE)request->tid, &thread);
     if (!NT_SUCCESS(status))
@@ -421,104 +381,74 @@ void Handler_QueueUserAPC(PIRP pIrp)
     }
     ObDereferenceObject(thread);
     response->reserved = 0;
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = outputSize;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
 void Handler_OpenProcess(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    PVOID outputBuffer = inputBuffer;
-    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-    if (inputSize < sizeof(KCProtocols::REQUEST_OPEN_PROCESS) || outputSize < sizeof(KCProtocols::RESPONSE_OPEN_PROCESS))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
     auto request = (KCProtocols::REQUEST_OPEN_PROCESS*)inputBuffer;
     auto response = (KCProtocols::RESPONSE_OPEN_PROCESS*)outputBuffer;
-
     CLIENT_ID cid = {};
     cid.UniqueProcess = (HANDLE)request->pid;
     OBJECT_ATTRIBUTES ObjectAttributes = {};
-    InitializeObjectAttributes(&ObjectAttributes, NULL, OBJ_KERNEL_HANDLE, NULL, NULL);
-    HANDLE kernelHandle = 0;
-    if (!NT_SUCCESS(ZwOpenProcess(&kernelHandle, request->access, &ObjectAttributes, &cid)))
+    InitializeObjectAttributes(&ObjectAttributes, NULL, request->request_user_mode_handle ? 0 : OBJ_KERNEL_HANDLE, NULL, NULL);
+    HANDLE handle = 0;
+    if (!NT_SUCCESS(ZwOpenProcess(&handle, request->access, &ObjectAttributes, &cid)))
     {
         return ;
     }
-    response->kernelModeHandle = (UINT64)kernelHandle;
-
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = outputSize;
+    response->handle = (UINT64)handle;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
 void Handler_CloseHandle(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    PVOID outputBuffer = inputBuffer;
-    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-    if (inputSize < sizeof(KCProtocols::REQUEST_CLOSE_HANDLE) || outputSize < sizeof(KCProtocols::RESPONSE_CLOSE_HANDLE))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
     auto request = (KCProtocols::REQUEST_CLOSE_HANDLE*)inputBuffer;
     auto response = (KCProtocols::RESPONSE_CLOSE_HANDLE*)outputBuffer;
-
     ZwClose((HANDLE)request->kernelModeHandle);
     response->reserved = 0;
-
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = outputSize;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
 void Handler_SetInformationProcess(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    PVOID outputBuffer = inputBuffer;
-    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-    if (inputSize < sizeof(KCProtocols::REQUEST_SET_INFORMATION_PROCESS) || outputSize < sizeof(KCProtocols::RESPONSE_SET_INFORMATION_PROCESS))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
     auto request = (KCProtocols::REQUEST_SET_INFORMATION_PROCESS*)inputBuffer;
     auto response = (KCProtocols::RESPONSE_SET_INFORMATION_PROCESS*)outputBuffer;
-
     if (!NT_SUCCESS(KHelper::Common::SetInformationProcess((HANDLE)request->kernelModeHandle, (PROCESSINFOCLASS)request->processInformationClass, request->processInformation, request->processInformationLength)))
     {
         return;
     }
     response->reserved = 0;
-
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = outputSize;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
 void Handler_GetProcessModuleBase(PIRP pIrp)
 {
-    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
-    PVOID inputBuffer = pIrp->AssociatedIrp.SystemBuffer;
-    ULONG inputSize = stack->Parameters.DeviceIoControl.InputBufferLength;
-    PVOID outputBuffer = inputBuffer;
-    ULONG outputSize = stack->Parameters.DeviceIoControl.OutputBufferLength;
-    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
-    pIrp->IoStatus.Information = 0;
-    if (inputSize < sizeof(KCProtocols::REQUEST_GET_PROCESS_MODULE_BASE) || outputSize < sizeof(KCProtocols::RESPONSE_GET_PROCESS_MODULE_BASE))
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
     {
         return;
     }
@@ -530,19 +460,112 @@ void Handler_GetProcessModuleBase(PIRP pIrp)
         return;
     }
     response->base = (UINT64)base;
-    pIrp->IoStatus.Status = STATUS_SUCCESS;
-    pIrp->IoStatus.Information = outputSize;
+    GeneralIRPSuccessStatusSet(pIrp);
     return;
 }
 
+void Handler_SetThreadContext(PIRP pIrp)
+{
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
+    {
+        return;
+    }
+    auto request = (KCProtocols::REQUEST_SET_THREAD_CONTEXT*)inputBuffer;
+    // find PsSetContextThread kernel routine
+    using _PsSetContextThread = NTSTATUS(NTAPI*)(
+        IN PETHREAD Thread,
+        IN PCONTEXT Context,
+        IN KPROCESSOR_MODE PreviousMode
+        );
+    auto Proc_PsSetContextThread = (_PsSetContextThread)KHelper::Common::KernelGetSystemRoutine(L"PsSetContextThread");
+    if (!Proc_PsSetContextThread)
+    {
+        return;
+    }
+    PETHREAD thread = 0;
+    if (request->usermode_handle)
+    {
+        if (STATUS_SUCCESS != ObReferenceObjectByHandle((HANDLE)request->usermode_handle, 0, *PsThreadType, UserMode, (PVOID*)&thread, 0))
+        {
+            return;
+        }
+    }
+    else
+    {
+        if (STATUS_SUCCESS != PsLookupThreadByThreadId((HANDLE)request->tid, &thread))
+        {
+            return;
+        }
+    }
+    auto ret = Proc_PsSetContextThread(thread, &request->ctx, KernelMode);
+    if (STATUS_SUCCESS == ret)
+    {
+        GeneralIRPSuccessStatusSet(pIrp);
+    }
+    else
+    {
+        ;
+    }
+    ObDereferenceObject(thread);
+    return;
+}
+
+void Handler_GetThreadContext(PIRP pIrp)
+{
+    PVOID inputBuffer;
+    PVOID outputBuffer;
+    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
+    {
+        return;
+    }
+    auto request = (KCProtocols::REQUEST_GET_THREAD_CONTEXT*)inputBuffer;
+    auto response = (KCProtocols::RESPONSE_GET_THREAD_CONTEXT*)outputBuffer;
+    using _PsGetContextThread = NTSTATUS(NTAPI*)(
+        IN PETHREAD Thread,
+        OUT PCONTEXT Context,
+        IN KPROCESSOR_MODE PreviousMode
+        );
+    auto Proc_PsGetContextThread = (_PsGetContextThread)KHelper::Common::KernelGetSystemRoutine(L"PsGetContextThread");
+    if (!Proc_PsGetContextThread)
+    {
+        return;
+    }
+    PETHREAD thread = 0;
+    if (request->usermode_handle)
+    {
+        if (STATUS_SUCCESS != ObReferenceObjectByHandle((HANDLE)request->usermode_handle, 0, *PsThreadType, UserMode, (PVOID*)&thread, 0))
+        {
+            return;
+        }
+    }
+    else
+    {
+        if (STATUS_SUCCESS != PsLookupThreadByThreadId((HANDLE)request->tid, &thread))
+        {
+            return;
+        }
+    }
+    response->ctx.ContextFlags = request->ctx.ContextFlags;
+    auto ret = Proc_PsGetContextThread(thread, &response->ctx, KernelMode);
+    if (STATUS_SUCCESS == ret)
+    {
+        GeneralIRPSuccessStatusSet(pIrp);
+    }
+    else
+    {
+        ;
+    }
+    ObDereferenceObject(thread);
+    return;
+}
 
 NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
 {
     UNREFERENCED_PARAMETER(device);
-
     PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
     ULONG cc = stack->Parameters.DeviceIoControl.IoControlCode;
-
     switch (cc)
     {
     case CC_READ_PROCESS_MEM:
@@ -620,15 +643,23 @@ NTSTATUS IRPDispatch(PDRIVER_OBJECT device, PIRP pIrp)
         Handler_GetProcessModuleBase(pIrp);
         break;
     }
+    case CC_SET_THREAD_CONTEXT:
+    {
+        Handler_SetThreadContext(pIrp);
+        break;
+    }
+    case CC_GET_THREAD_CONTEXT:
+    {
+        Handler_GetThreadContext(pIrp);
+        break;
+    }
     default:
     {
         pIrp->IoStatus.Information = 0;
         pIrp->IoStatus.Status = STATUS_SUCCESS;
     }
     }
-
     NTSTATUS ioStatus = pIrp->IoStatus.Status;
     IoCompleteRequest(pIrp, IO_NO_INCREMENT);
-
     return ioStatus;
 }

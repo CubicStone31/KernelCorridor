@@ -111,6 +111,13 @@ PVOID KHelper::Common::KernelGetProcAddress(PVOID ModuleBase, PCHAR pFunctionNam
     return pFunctionAddress;
 }
 
+PVOID KHelper::Common::KernelGetSystemRoutine(PWCHAR systemRoutineName)
+{
+    UNICODE_STRING Name;
+    RtlInitUnicodeString(&Name, systemRoutineName);
+    return MmGetSystemRoutineAddress(&Name);
+}
+
 NTSTATUS KHelper::Common::ReadProcessMemory(PEPROCESS process, PVOID sourceAddr, PVOID targetAddr, SIZE_T size, SIZE_T* returnedSize)
 {
     if (!GeneralUserModeMemoryCheck(process, sourceAddr, size))
@@ -170,9 +177,10 @@ NTSTATUS KHelper::Common::ReadProcessMemoryByMdl(PEPROCESS process, PVOID source
         oldProtect = 0;
         if (auto status = ZwProtectVirtualMemory(ZwCurrentProcess(), &baseAddr, &bytesToProtect, PAGE_EXECUTE_READWRITE, &oldProtect))
         {
-            kprintf("ZwProtectVirtualMemory failed.\n");
-            ret = status;
-            break;
+            dprintf("ZwProtectVirtualMemory failed with %x\nbase: 0x%x, size: 0x%x\n", status, baseAddr, bytesToProtect);
+            // some memory pages cannot be set to rwx, for instance, pages with MMVAD.u.VadFlags.NoChange set to 1.
+            // although the protection cannot be changed, we can still read data from that page, maybe.
+            // so we just log the failure and keep the code going
         }
         protectionChanged = true;
 
@@ -184,7 +192,7 @@ NTSTATUS KHelper::Common::ReadProcessMemoryByMdl(PEPROCESS process, PVOID source
             data = MmGetSystemAddressForMdlSafe(mdl, HighPagePriority);
             if (data == NULL)
             {
-                kprintf("MmGetSystemAddressForMdlSafe failed.\n");
+                dprintf("MmGetSystemAddressForMdlSafe failed.\n");
                 ret = STATUS_UNSUCCESSFUL;
                 break;
             }
@@ -196,7 +204,7 @@ NTSTATUS KHelper::Common::ReadProcessMemoryByMdl(PEPROCESS process, PVOID source
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
-            kprintf("MmProbeAndLockPages failed.\n");
+            dprintf("MmProbeAndLockPages failed.\n");
             ret = STATUS_UNSUCCESSFUL;
             break;
         }

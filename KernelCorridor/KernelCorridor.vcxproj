@@ -75,7 +75,6 @@
     <FilesToPackage Include="$(TargetPath)" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="interface.h" />
     <ClInclude Include="khelper\kdefs.h" />
     <ClInclude Include="khelper\khelper.h" />
     <ClInclude Include="khelper\undocumentedAPIs.h" />

@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "KCLoader", "KCLoader\KCLoad
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "KC_usermode", "KC_usermode\KC_usermode.vcxproj", "{B380A55E-975A-4842-B509-EFD5285B7425}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test", "test\test.vcxproj", "{79609F40-3D6A-445C-96AE-0B34534311A8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -53,6 +55,14 @@ Global
 		{B380A55E-975A-4842-B509-EFD5285B7425}.Release|x64.Build.0 = Release|x64
 		{B380A55E-975A-4842-B509-EFD5285B7425}.Release|x86.ActiveCfg = Release|Win32
 		{B380A55E-975A-4842-B509-EFD5285B7425}.Release|x86.Build.0 = Release|Win32
+		{79609F40-3D6A-445C-96AE-0B34534311A8}.Debug|x64.ActiveCfg = Debug|x64
+		{79609F40-3D6A-445C-96AE-0B34534311A8}.Debug|x64.Build.0 = Debug|x64
+		{79609F40-3D6A-445C-96AE-0B34534311A8}.Debug|x86.ActiveCfg = Debug|Win32
+		{79609F40-3D6A-445C-96AE-0B34534311A8}.Debug|x86.Build.0 = Debug|Win32
+		{79609F40-3D6A-445C-96AE-0B34534311A8}.Release|x64.ActiveCfg = Release|x64
+		{79609F40-3D6A-445C-96AE-0B34534311A8}.Release|x64.Build.0 = Release|x64
+		{79609F40-3D6A-445C-96AE-0B34534311A8}.Release|x86.ActiveCfg = Release|Win32
+		{79609F40-3D6A-445C-96AE-0B34534311A8}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

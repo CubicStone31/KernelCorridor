@@ -1,6 +1,6 @@
 #include "KC_usermode.h"
 #include <windows.h>
-#include "../KernelCorridor/interface.h"
+#include "interface.h"
 #include <cstdlib>
 #include <time.h>
 
@@ -30,16 +30,16 @@ bool KernelCorridor::CreateDriverServiceAndLoadDriver(const std::wstring& driver
         actual_service_name = service_name;
     }
     auto service = CreateServiceW(service_mgr,
-        actual_service_name.c_str(), 
-        actual_service_name.c_str(), 
-        SERVICE_ALL_ACCESS, 
-        SERVICE_KERNEL_DRIVER, 
-        SERVICE_DEMAND_START, 
+        actual_service_name.c_str(),
+        actual_service_name.c_str(),
+        SERVICE_ALL_ACCESS,
+        SERVICE_KERNEL_DRIVER,
+        SERVICE_DEMAND_START,
         SERVICE_ERROR_IGNORE,
-        driver_file_path.c_str(), 
+        driver_file_path.c_str(),
         0,
         0,
-        0, 
+        0,
         0,
         0);
     if (!service)
@@ -202,35 +202,120 @@ void KernelCorridor::Close()
     }
 }
 
-bool KernelCorridor::WriteProcessMemory(uint32_t pid, uint64_t address_to_write, const std::vector<uint8_t>& data)
+bool KernelCorridor::WriteProcessMemory(uint32_t pid, uint64_t address_to_write, const std::vector<uint8_t>& data, uint32_t& bytes_written, uint32_t method_id)
 {
     KCProtocols::REQUEST_WRITE_PROCESS_MEM* request = (KCProtocols::REQUEST_WRITE_PROCESS_MEM*)malloc(sizeof(KCProtocols::REQUEST_WRITE_PROCESS_MEM) + data.size());
     request->addr = address_to_write;
-    request->method = KCProtocols::MEM_ACCESS_METHOD::MapToKernelByMdl;
+    request->method = (KCProtocols::MEM_ACCESS_METHOD)method_id;
     request->pid = pid;
     request->size = data.size();
-    memcpy(request->data, &data[0], data.size());
+    memcpy(request->data, data.data(), data.size());
     KCProtocols::RESPONSE_WRITE_PROCESS_MEM response = {};
     DWORD bytesReturned = 0;
     if (!DeviceIoControl(G_Driver, CC_WRITE_PROCESS_MEM, request, sizeof(KCProtocols::REQUEST_WRITE_PROCESS_MEM) + data.size(), &response, sizeof(response), &bytesReturned, 0))
     {
         return false;
     }
+    bytes_written = response.bytesWritten;
     return true;
 }
 
-bool KernelCorridor::ReadProcessMemory(uint32_t pid, uint64_t address_to_read, uint32_t length_to_read, std::vector<uint8_t>& out)
+bool KernelCorridor::ReadProcessMemory(uint32_t pid, uint64_t address_to_read, uint32_t length_to_read, std::vector<uint8_t>& out, uint32_t method_id)
 {
     KCProtocols::REQUEST_READ_PROCESS_MEM request = {};
     request.pid = pid;
     request.addr = address_to_read;
     request.size = length_to_read;
-    request.method = KCProtocols::MEM_ACCESS_METHOD::MapToKernelByMdl;
+    request.method = (KCProtocols::MEM_ACCESS_METHOD)method_id;
     KCProtocols::RESPONSE_READ_PROCESS_MEM* response = (KCProtocols::RESPONSE_READ_PROCESS_MEM*)malloc(sizeof(KCProtocols::RESPONSE_READ_PROCESS_MEM) + length_to_read);
     DWORD bytesReturned = 0;
     if (!DeviceIoControl(G_Driver, CC_READ_PROCESS_MEM, &request, sizeof(request), response, sizeof(KCProtocols::RESPONSE_READ_PROCESS_MEM) + length_to_read, &bytesReturned, 0))
     {
         return false;
     }
+    out = { response->data, response->data + response->size };
     return true;
 }
+
+bool KernelCorridor::SetThreadContext(uint32_t tid, uint64_t usermode_handle, CONTEXT ctx)
+{
+    KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT protocol_buffer = {};
+    auto request = (KCProtocols::REQUEST_SET_THREAD_CONTEXT*)&protocol_buffer;
+    request->tid = tid;
+    request->usermode_handle = usermode_handle;
+    request->ctx = ctx;
+    DWORD bytesReturned = 0;
+    if (!DeviceIoControl(G_Driver, CC_SET_THREAD_CONTEXT, &protocol_buffer, sizeof(protocol_buffer), &protocol_buffer, sizeof(protocol_buffer), &bytesReturned, 0))
+    {
+        return false;
+    }
+    return true;
+}
+
+bool KernelCorridor::GetThreadContext(uint32_t tid, uint64_t usermode_handle, CONTEXT* ctx)
+{
+    KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT protocol_buffer = {};
+    auto request = (KCProtocols::REQUEST_GET_THREAD_CONTEXT*)&protocol_buffer;
+    request->tid = tid;
+    request->usermode_handle = usermode_handle;
+    DWORD bytesReturned = 0;
+    if (!DeviceIoControl(G_Driver, CC_GET_THREAD_CONTEXT, &protocol_buffer, sizeof(protocol_buffer), &protocol_buffer, sizeof(protocol_buffer), &bytesReturned, 0))
+    {
+        return false;
+    }
+    auto response = (KCProtocols::RESPONSE_GET_THREAD_CONTEXT*)request;
+    *ctx = response->ctx;
+    return true;
+}
+
+bool KernelCorridor::AllocProcessMemory(uint32_t pid, uint64_t* base, uint32_t* size, uint32_t protect)
+{
+    KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT protocol_buffer = {};
+    auto request = (KCProtocols::REQUEST_ALLOC_PROCESS_MEM*)&protocol_buffer;
+    request->pid = pid;
+    request->addr = *base;
+    request->length = *size;
+    request->protect = protect;
+    request->isFree = 0;
+    DWORD bytesReturned = 0;
+    if (!DeviceIoControl(G_Driver, CC_ALLOC_PROCESS_MEM, &protocol_buffer, sizeof(protocol_buffer), &protocol_buffer, sizeof(protocol_buffer), &bytesReturned, 0))
+    {
+        return false;
+    }
+    auto response = (KCProtocols::RESPONSE_ALLOC_PROCESS_MEM*)request;
+    *base = response->base;
+    *size = response->size;
+    return true;
+}
+
+bool KernelCorridor::FreeAllocedProcessMemory(uint32_t pid, uint64_t base)
+{
+    KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT protocol_buffer = {};
+    auto request = (KCProtocols::REQUEST_ALLOC_PROCESS_MEM*)&protocol_buffer;
+    request->pid = pid;
+    request->addr = base;
+    request->isFree = 1;
+    DWORD bytesReturned = 0;
+    if (!DeviceIoControl(G_Driver, CC_ALLOC_PROCESS_MEM, &protocol_buffer, sizeof(protocol_buffer), &protocol_buffer, sizeof(protocol_buffer), &bytesReturned, 0))
+    {
+        return false;
+    }
+    return true;
+}
+
+HANDLE KernelCorridor::OpenProcess(uint32_t pid, uint32_t access, bool request_kernel_mode_handle)
+{
+    KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT protocol_buffer = {};
+    auto request = (KCProtocols::REQUEST_OPEN_PROCESS*)&protocol_buffer;
+    request->access = access;
+    request->pid = pid;
+    request->request_user_mode_handle = !request_kernel_mode_handle;
+    DWORD bytesReturned = 0;
+    if (!DeviceIoControl(G_Driver, CC_OPEN_PROCESS, &protocol_buffer, sizeof(protocol_buffer), &protocol_buffer, sizeof(protocol_buffer), &bytesReturned, 0))
+    {
+        return NULL;
+    }
+    auto response = (KCProtocols::RESPONSE_OPEN_PROCESS*)request;
+    return (HANDLE)response->handle;
+}
+

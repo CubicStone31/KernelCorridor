@@ -31,9 +31,6 @@
     <ClInclude Include="khelper\undocumentedAPIs.h">
       <Filter>khelper</Filter>
     </ClInclude>
-    <ClInclude Include="interface.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="khelper\khelper.cpp">
