@@ -419,7 +419,7 @@ void Handler_CloseHandle(PIRP pIrp)
     }
     auto request = (KCProtocols::REQUEST_CLOSE_HANDLE*)inputBuffer;
     auto response = (KCProtocols::RESPONSE_CLOSE_HANDLE*)outputBuffer;
-    ZwClose((HANDLE)request->kernelModeHandle);
+    ZwClose((HANDLE)request->handle);
     response->reserved = 0;
     GeneralIRPSuccessStatusSet(pIrp);
     return;
@@ -427,15 +427,22 @@ void Handler_CloseHandle(PIRP pIrp)
 
 void Handler_SetInformationProcess(PIRP pIrp)
 {
-    PVOID inputBuffer;
-    PVOID outputBuffer;
-    if (!GeneralProtocolHeaderCheckAndIRPStatusPreset(pIrp, inputBuffer, outputBuffer))
+    PIO_STACK_LOCATION stack = IoGetCurrentIrpStackLocation(pIrp);
+    PVOID input = pIrp->AssociatedIrp.SystemBuffer;
+    ULONG input_size = stack->Parameters.DeviceIoControl.InputBufferLength;
+    PVOID output = input;
+    ULONG output_size = stack->Parameters.DeviceIoControl.OutputBufferLength;
+    pIrp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+    pIrp->IoStatus.Information = 0;
+    auto request = (KCProtocols::REQUEST_SET_INFORMATION_PROCESS*)input;
+    auto response = (KCProtocols::RESPONSE_SET_INFORMATION_PROCESS*)output;
+    if (input_size < sizeof(KCProtocols::REQUEST_SET_INFORMATION_PROCESS) ||
+        input_size != sizeof(KCProtocols::REQUEST_SET_INFORMATION_PROCESS) + request->processInformationLength ||
+        output_size != sizeof(KCProtocols::RESPONSE_SET_INFORMATION_PROCESS))
     {
-        return;
+        return ;
     }
-    auto request = (KCProtocols::REQUEST_SET_INFORMATION_PROCESS*)inputBuffer;
-    auto response = (KCProtocols::RESPONSE_SET_INFORMATION_PROCESS*)outputBuffer;
-    if (!NT_SUCCESS(KHelper::Common::SetInformationProcess((HANDLE)request->kernelModeHandle, (PROCESSINFOCLASS)request->processInformationClass, request->processInformation, request->processInformationLength)))
+    if (!NT_SUCCESS(KHelper::Common::SetInformationProcess((HANDLE)request->handle, (PROCESSINFOCLASS)request->processInformationClass, request->processInformation, request->processInformationLength)))
     {
         return;
     }

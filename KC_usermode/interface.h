@@ -199,7 +199,7 @@ namespace KCProtocols
 
     struct REQUEST_CLOSE_HANDLE
     {
-        UINT64 kernelModeHandle;
+        UINT64 handle;
     };
 
     struct RESPONSE_CLOSE_HANDLE
@@ -209,7 +209,7 @@ namespace KCProtocols
 
     struct REQUEST_SET_INFORMATION_PROCESS
     {
-        UINT64 kernelModeHandle;
+        UINT64 handle;
         UINT32 processInformationClass;
         UINT32 processInformationLength;
         UINT8 processInformation[0];

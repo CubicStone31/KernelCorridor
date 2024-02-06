@@ -28,6 +28,14 @@ namespace KernelCorridor
 	bool FreeAllocedProcessMemory(uint32_t pid, uint64_t base);
 
 	HANDLE OpenProcess(uint32_t pid, uint32_t access, bool request_kernel_mode_handle);
+
+	bool KCCloseHandle(HANDLE handle);
+
+	bool SetInformationProcess(uint64_t handle, uint32_t process_info_class, const std::vector<uint8_t>& data);
+
+	uint32_t CreateRemoteUserThread(uint32_t pid, uint64_t addr, uint64_t param, bool create_suspended);
+
+	bool QueueUserAPC(uint32_t tid, uint64_t start_addr, uint64_t param, bool force_execute);
 }
 
 

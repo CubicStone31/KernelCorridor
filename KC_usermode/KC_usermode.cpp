@@ -3,6 +3,7 @@
 #include "interface.h"
 #include <cstdlib>
 #include <time.h>
+#include <memory>
 
 HANDLE G_Driver = INVALID_HANDLE_VALUE;
 uint32_t DriverReferenceCount = 0;
@@ -316,3 +317,66 @@ HANDLE KernelCorridor::OpenProcess(uint32_t pid, uint32_t access, bool request_k
     return (HANDLE)response->handle;
 }
 
+bool KernelCorridor::KCCloseHandle(HANDLE handle)
+{
+    KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT protocol_buffer = {};
+    auto request = (KCProtocols::REQUEST_CLOSE_HANDLE*)&protocol_buffer;
+    request->handle = (UINT64)handle;
+    DWORD bytesReturned = 0;
+    if (!DeviceIoControl(G_Driver, CC_CLOSE_HANDLE, &protocol_buffer, sizeof(protocol_buffer), &protocol_buffer, sizeof(protocol_buffer), &bytesReturned, 0))
+    {
+        return false;
+    }
+    return true;
+}
+
+bool KernelCorridor::SetInformationProcess(uint64_t handle, uint32_t process_info_class, const std::vector<uint8_t>& data)
+{
+    auto requestSize = sizeof(KCProtocols::REQUEST_SET_INFORMATION_PROCESS) + data.size();
+    auto buffer = std::make_unique<uint8_t>(requestSize);
+    auto request = (KCProtocols::REQUEST_SET_INFORMATION_PROCESS*)buffer.get();
+    request->handle = handle;
+    request->processInformationClass = process_info_class;
+    request->processInformationLength = data.size();
+    memcpy(request->processInformation, data.data(), data.size());
+    KCProtocols::RESPONSE_SET_INFORMATION_PROCESS response = {};
+    DWORD bytesReturned = 0;
+    if (!DeviceIoControl(G_Driver, CC_SET_INFORMATION_PROCESS, request, requestSize, &response, sizeof(response), &bytesReturned, 0))
+    {
+        return false;
+    }
+    return true;
+}
+
+uint32_t KernelCorridor::CreateRemoteUserThread(uint32_t pid, uint64_t addr, uint64_t param, bool create_suspended)
+{
+    KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT protocol_buffer = {};
+    auto request = (KCProtocols::REQUEST_CREATE_USER_THREAD*)&protocol_buffer;
+    request->createSuspended = create_suspended;
+    request->parameter = param;
+    request->pid = pid;
+    request->startAddr = addr;
+    DWORD bytesReturned = 0;
+    if (!DeviceIoControl(G_Driver, CC_CREATE_USER_THREAD, &protocol_buffer, sizeof(protocol_buffer), &protocol_buffer, sizeof(protocol_buffer), &bytesReturned, 0))
+    {
+        return 0;
+    }
+    auto response = (KCProtocols::RESPONSE_CREATE_USER_THREAD*)&protocol_buffer;
+    return response->threadID;
+}
+
+bool KernelCorridor::QueueUserAPC(uint32_t tid, uint64_t start_addr, uint64_t param, bool force_execute)
+{
+    KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT protocol_buffer = {};
+    auto request = (KCProtocols::REQUEST_QUEUE_USER_APC*)&protocol_buffer;
+    request->tid = tid;
+    request->apcRoutine = start_addr;
+    request->apcParam = param;
+    request->forceExecute = force_execute;
+    DWORD bytesReturned = 0;
+    if (!DeviceIoControl(G_Driver, CC_QUEUE_USER_APC, &protocol_buffer, sizeof(protocol_buffer), &protocol_buffer, sizeof(protocol_buffer), &bytesReturned, 0))
+    {
+        return false;
+    }
+    return true;
+}
