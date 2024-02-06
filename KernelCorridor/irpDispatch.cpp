@@ -485,28 +485,14 @@ void Handler_SetThreadContext(PIRP pIrp)
         return;
     }
     PETHREAD thread = 0;
-    if (request->usermode_handle)
+    if (STATUS_SUCCESS != PsLookupThreadByThreadId((HANDLE)request->tid, &thread))
     {
-        if (STATUS_SUCCESS != ObReferenceObjectByHandle((HANDLE)request->usermode_handle, 0, *PsThreadType, UserMode, (PVOID*)&thread, 0))
-        {
-            return;
-        }
-    }
-    else
-    {
-        if (STATUS_SUCCESS != PsLookupThreadByThreadId((HANDLE)request->tid, &thread))
-        {
-            return;
-        }
-    }
-    auto ret = Proc_PsSetContextThread(thread, &request->ctx, KernelMode);
+        return;
+    } 
+    auto ret = Proc_PsSetContextThread(thread, request->ctx, UserMode);
     if (STATUS_SUCCESS == ret)
     {
         GeneralIRPSuccessStatusSet(pIrp);
-    }
-    else
-    {
-        ;
     }
     ObDereferenceObject(thread);
     return;
@@ -521,7 +507,6 @@ void Handler_GetThreadContext(PIRP pIrp)
         return;
     }
     auto request = (KCProtocols::REQUEST_GET_THREAD_CONTEXT*)inputBuffer;
-    auto response = (KCProtocols::RESPONSE_GET_THREAD_CONTEXT*)outputBuffer;
     using _PsGetContextThread = NTSTATUS(NTAPI*)(
         IN PETHREAD Thread,
         OUT PCONTEXT Context,
@@ -533,29 +518,14 @@ void Handler_GetThreadContext(PIRP pIrp)
         return;
     }
     PETHREAD thread = 0;
-    if (request->usermode_handle)
+    if (STATUS_SUCCESS != PsLookupThreadByThreadId((HANDLE)request->tid, &thread))
     {
-        if (STATUS_SUCCESS != ObReferenceObjectByHandle((HANDLE)request->usermode_handle, 0, *PsThreadType, UserMode, (PVOID*)&thread, 0))
-        {
-            return;
-        }
-    }
-    else
-    {
-        if (STATUS_SUCCESS != PsLookupThreadByThreadId((HANDLE)request->tid, &thread))
-        {
-            return;
-        }
-    }
-    response->ctx.ContextFlags = request->ctx.ContextFlags;
-    auto ret = Proc_PsGetContextThread(thread, &response->ctx, KernelMode);
+        return;
+    } 
+    auto ret = Proc_PsGetContextThread(thread, request->ctx, UserMode);
     if (STATUS_SUCCESS == ret)
     {
         GeneralIRPSuccessStatusSet(pIrp);
-    }
-    else
-    {
-        ;
     }
     ObDereferenceObject(thread);
     return;

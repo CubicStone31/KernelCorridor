@@ -142,7 +142,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\KernelCorridor\interface.h" />
+    <ClInclude Include="interface.h" />
     <ClInclude Include="KC_usermode.h" />
   </ItemGroup>
   <ItemGroup>

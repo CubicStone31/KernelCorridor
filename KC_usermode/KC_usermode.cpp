@@ -237,12 +237,11 @@ bool KernelCorridor::ReadProcessMemory(uint32_t pid, uint64_t address_to_read, u
     return true;
 }
 
-bool KernelCorridor::SetThreadContext(uint32_t tid, uint64_t usermode_handle, CONTEXT ctx)
+bool KernelCorridor::SetThreadContext(uint32_t tid, CONTEXT* ctx)
 {
     KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT protocol_buffer = {};
     auto request = (KCProtocols::REQUEST_SET_THREAD_CONTEXT*)&protocol_buffer;
     request->tid = tid;
-    request->usermode_handle = usermode_handle;
     request->ctx = ctx;
     DWORD bytesReturned = 0;
     if (!DeviceIoControl(G_Driver, CC_SET_THREAD_CONTEXT, &protocol_buffer, sizeof(protocol_buffer), &protocol_buffer, sizeof(protocol_buffer), &bytesReturned, 0))
@@ -252,19 +251,17 @@ bool KernelCorridor::SetThreadContext(uint32_t tid, uint64_t usermode_handle, CO
     return true;
 }
 
-bool KernelCorridor::GetThreadContext(uint32_t tid, uint64_t usermode_handle, CONTEXT* ctx)
+bool KernelCorridor::GetThreadContext(uint32_t tid, CONTEXT* ctx)
 {
     KCProtocols::GENERAL_FIXED_SIZE_PROTOCOL_INPUT_OUTPUT protocol_buffer = {};
     auto request = (KCProtocols::REQUEST_GET_THREAD_CONTEXT*)&protocol_buffer;
     request->tid = tid;
-    request->usermode_handle = usermode_handle;
+    request->ctx = ctx;
     DWORD bytesReturned = 0;
     if (!DeviceIoControl(G_Driver, CC_GET_THREAD_CONTEXT, &protocol_buffer, sizeof(protocol_buffer), &protocol_buffer, sizeof(protocol_buffer), &bytesReturned, 0))
     {
         return false;
     }
-    auto response = (KCProtocols::RESPONSE_GET_THREAD_CONTEXT*)request;
-    *ctx = response->ctx;
     return true;
 }
 

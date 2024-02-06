@@ -3,69 +3,31 @@
 
 #include <iostream>
 #include <windows.h>
-#include "../KernelCorridor/interface.h"
+#include "../KC_usermode/KC_usermode.h"
+#include "../KC_usermode/KC_usermode.cpp"
 #include <cstdint>
-
-HANDLE G_Driver = INVALID_HANDLE_VALUE;
-
-bool SetThreadContext1(uint32_t tid, uint64_t usermode_handle, CONTEXT ctx)
-{
-    KCProtocols::REQUEST_SET_THREAD_CONTEXT request = {};
-    request.tid = tid;
-    request.usermode_handle = usermode_handle;
-    request.ctx = ctx;
-    DWORD bytesReturned = 0;
-    if (!DeviceIoControl(G_Driver, CC_SET_THREAD_CONTEXT, &request, sizeof(request), 0, 0, &bytesReturned, 0))
-    {
-        return false;
-    }
-    return true;
-}
-
-bool GetThreadContext1(uint32_t tid, uint64_t usermode_handle, CONTEXT* ctx)
-{
-    KCProtocols::REQUEST_GET_THREAD_CONTEXT request = {};
-    request.tid = tid;
-    request.usermode_handle = usermode_handle;
-    request.ctx = *ctx;
-    KCProtocols::RESPONSE_GET_THREAD_CONTEXT response = {};
-    DWORD bytesReturned = 0;
-    if (!DeviceIoControl(G_Driver, CC_GET_THREAD_CONTEXT, &request, sizeof(request), &response, sizeof(response), &bytesReturned, 0))
-    {
-        return false;
-    }
-    *ctx = response.ctx;
-    return true;
-}
 
 DWORD TestThread(void* param)
 {
     while (true)
     {
-        ;
+        Sleep(1000);
     }
 }
 
 int main()
 {
-    G_Driver = CreateFileW(KC_SYMBOLIC_NAME, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-    if (INVALID_HANDLE_VALUE == G_Driver)
-    {
-        return false;
-    }
+    KernelCorridor::Open();
 
     DWORD threadid = 29460;
+    CreateThread(0, 0, TestThread, 0, 0, &threadid);
     auto handle = OpenThread(THREAD_ALL_ACCESS, 0, threadid);
-    Sleep(1000);
     SuspendThread(handle);
     CONTEXT ctx = {};
-    ctx.ContextFlags = CONTEXT_INTEGER;
-    GetThreadContext1(threadid, 0, &ctx);
-    ctx.Rax = 0x5555444433332222;
-    //ctx.Rip = 0;
-    //auto ret = SetThreadContext(handle, &ctx);
-
-    //auto ret = SetThreadContext1(threadid, (uint64_t)0, ctx);
+    ctx.ContextFlags = CONTEXT_ALL;
+    KernelCorridor::GetThreadContext(threadid, &ctx);
+    //ctx.Rip += 1;
+    KernelCorridor::SetThreadContext(threadid, &ctx);
 
 
     ResumeThread(handle);

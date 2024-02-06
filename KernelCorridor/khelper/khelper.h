@@ -6,7 +6,7 @@
 
 #define KHELPERTAG 'LEHK'
 #define kprintf(...) DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, __VA_ARGS__)
-#ifdef _DEBUG
+#ifdef KC_DEBUG
 #define dprintf(...) DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, __VA_ARGS__)
 #else
 #define dprintf(...) 
@@ -112,9 +112,11 @@ namespace KHelper
         {
             if (KHelper::UnDocumentedData::EPROCESS_ImageFileName_Offset == KHelper::UnDocumentedData::INVALID_DATA_VALUE)
             {
-                return STATUS_NOT_IMPLEMENTED;
+                if (!FindProcessNameOffset())
+                {
+                    return STATUS_NOT_IMPLEMENTED;
+                }
             }
-
             PEPROCESS curproc;
             char* nameptr;
             curproc = PsGetCurrentProcess();
@@ -128,7 +130,10 @@ namespace KHelper
         {
             if (KHelper::UnDocumentedData::EPROCESS_ImageFileName_Offset == KHelper::UnDocumentedData::INVALID_DATA_VALUE)
             {
-                return STATUS_NOT_IMPLEMENTED;
+                if (!FindProcessNameOffset())
+                {
+                    return STATUS_NOT_IMPLEMENTED;
+                }
             }
             PEPROCESS process = {};
             if (PsLookupProcessByProcessId((HANDLE)pid, &process) != STATUS_SUCCESS)

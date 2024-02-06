@@ -18,7 +18,7 @@
     <ClInclude Include="KC_usermode.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="..\KernelCorridor\interface.h">
+    <ClInclude Include="interface.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

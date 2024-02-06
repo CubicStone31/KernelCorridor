@@ -33,8 +33,8 @@
 #define CC_GET_THREAD_CONTEXT ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x812, METHOD_BUFFERED, FILE_READ_DATA))
 #define CC_SET_THREAD_CONTEXT ((ULONG)CTL_CODE(FILE_DEVICE_UNKNOWN, 0x813, METHOD_BUFFERED, FILE_READ_DATA))
 
-#define KC_DEVICE_NAME L"\\Device\\KernelCorridor"
-#define KC_SYMBOLIC_NAME L"\\??\\KernelCorridor"
+#define KC_DEVICE_NAME L"\\Device\\KernelCorridor-1.1"
+#define KC_SYMBOLIC_NAME L"\\??\\KernelCorridor-1.1"
 
 #pragma pack(push)
 #pragma pack(8)
@@ -235,20 +235,13 @@ namespace KCProtocols
     struct REQUEST_SET_THREAD_CONTEXT
     {
         UINT32 tid;
-        UINT64 usermode_handle;
-        CONTEXT ctx;
+        CONTEXT* ctx;
     };
 
     struct REQUEST_GET_THREAD_CONTEXT
     {
         UINT32 tid;
-        UINT64 usermode_handle;
-        CONTEXT ctx;
-    };
-
-    struct RESPONSE_GET_THREAD_CONTEXT
-    {
-        CONTEXT ctx;
+        CONTEXT* ctx;
     };
 }
 

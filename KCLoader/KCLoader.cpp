@@ -5,7 +5,7 @@
 #include <windows.h>
 #include <filesystem>
 #include "PDBReader/PDBReader.h"
-#include "../KernelCorridor/interface.h"
+#include "../KC_usermode/interface.h"
 #include <list>
 #include <utility>
 #include <versionhelpers.h>
